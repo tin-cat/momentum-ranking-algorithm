@@ -29,7 +29,7 @@ thresholdDecayPeriodDays <- 730
 
 # Momentum ranking algorithm
 
-A performance oriented algorithm to rank items in a set based on their momentary relevance.
+A performance oriented algorithm to rank items based on their momentary parametric relevance, suitable for social network feeds, real-time curated timelines, e-commerce relevance listings or other momentum-based data analysis.
 
 -   Items are ranked based on their current momentum.
 -   Momentum is a composite measure based on significant events triggered for a given item.
