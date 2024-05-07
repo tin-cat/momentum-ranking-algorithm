@@ -4,9 +4,6 @@ output:
   html_document:
     css: "rmarkdown_theme.css"
     keep_md: true
-header-includes:
-  - \usepackage{fontspec}
-  - \setmainfont{Roboto}
 ---
 
 
