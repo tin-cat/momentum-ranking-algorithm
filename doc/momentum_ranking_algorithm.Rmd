@@ -1,9 +1,13 @@
 ---
-title: Momentum ranking algorithm
 output:
   html_document:
     css: "rmarkdown_theme.css"
     keep_md: true
+  github_document:
+    html_preview: false
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding,
+  output_format = "all") })
 ---
 
 ```{r, echo=FALSE, fig.align="center"}
@@ -23,6 +27,8 @@ maxThresholdDays <- 30
 thresholdDecayPeriodDays <- 730
 ```
 
+# Momentum ranking algorithm
+
 A performance oriented algorithm to rank items in a set based on their momentary relevance.
 
 -   Items are ranked based on their current momentum.
@@ -31,21 +37,21 @@ A performance oriented algorithm to rank items in a set based on their momentary
 -   By adjusting a _newness_ factor, the algorithm will favor recent items to be ranked higher, so a rank of the latest relevant items can be created.
 -   Completely deactivating the _newness_ factor will provide an overall ranking of all items, taking only into account their current momentum.
 
-# Momentum vs. simple decaying algorithms
+## Momentum vs. simple decaying algorithms
 
 Simple decaying algorithms consider all indicators to wear out as they get old, without taking into consideration that old items could still become relevant if they receive enough momentum.
 
 To do so, instead of considering the total compounded indicators value over time for an item, it uses a momentum compounded indicator that considers items receiving recent attention as relevant, despite them being old.
 
-------------------------------------------------------------------------
+---
 
-# Algorithm
+## Algorithm
 
-## What is relevance?
+### What is relevance?
 
 We define relevance as the measure of interest an item in a set is expected to cause to an audience at a certain point in time according to a set of indicators, in relation to the other items in the set.
 
-## Calculating momentum
+### Calculating momentum
 
 The momentum of an item at a given time is calculated as a compound value of `events` that are considered momentum `indicators` (like received comments, likes and views).
 
@@ -54,25 +60,25 @@ Each `indicator` is weighted according to:
 - A specific `event` type `weight`
 - A time-based inverse exponential `weight` to favor the most recent `events` and nullify events triggered too much time ago, effectively considering only events triggered within a small timeframe before the given time.
 
-## The momentum decay factor
+### The momentum decay factor
 
 The `momentum decay factor` implements the energy loss aspect of momentum over time, causing events to contribute gradually less towards an item's instant momentum as they get older, by using a simple exponential formula. It cannot be deactivated.
 
-## The rank decay factor
+### The rank decay factor
 
 The `rank decay factor` introduces the ability to get rankings that favor recent items, so lists of items relevant to the present time can be created.
 
 By zeroing the `rank decay factor`, an absolute ranking of all items can be obtained.
 
-## No need for a warmup factor
+### No need for a warmup factor
 
 Unlike simplistic decaying ranking algorithms, there is no need to apply a warmup factor, because this algorithm only ranks items that have already received attention, and thus have some momentum. New items without any momentum would not be ranked.
 
-------------------------------------------------------------------------
+---
 
-# Calculating rank
+## Calculating rank
 
-## Instant momentum calculation
+### Instant momentum calculation
 
 The `instant momentum` $m$ is an indicator of how relevant an item is at a certain point in time, and it's the compound result of multiple weighted indicators, each representing a set of certain events that affected the item in a certain way, exponentially dampened so recent events are weighted heavier towards the final momentum calculation, and older events are gradually less weighted.
 
@@ -227,7 +233,7 @@ legend(
 
 Example showing a more realistic events scenario where an item's instant momentum calculation is affected by two indicators with different weight and dampening parameters (Likes: $l_w = `r likeWeight`$ and $l_f = `r format(likeMomentumDecayFactor, scientific = FALSE)`$, Comments: $c_w = `r commentWeight`$ and $c_f = `r format(commentMomentumDecayFactor, scientific = FALSE)`$). Each column represents a single event.
 
-## Calculating rank based on instant momentum
+### Calculating rank based on instant momentum
 
 Momentum $m$ already represents a rank if all items are to be considered equally. If old items must be ranked lower to obtain a newness-relevant ranking $r_t$ that favors newly created items over older ones (for example, for chronologically ranked timelines), an additional `age decay factor` $t_f$ and the `age of the item` $t_c$ is used:
 
@@ -235,13 +241,13 @@ $$
 r = m * (1 - t_f)^{t_c}
 $$
 
-------------------------------------------------------------------------
+---
 
-# Optimizing ranking calculation
+## Optimizing ranking calculation
 
 Because momentum calculation is compute-expensive, it's not feasible to perform it every time it's needed.
 
-## Precalculating momentum
+### Precalculating momentum
 
 Because `rank` is tied to `momentum`, and items' momentums change naturally over time, it's also not possible to simply precalculate an item's `rank` every time an `event` that might change it is triggered, and store it in a database.
 
@@ -249,7 +255,7 @@ To solve this, in addition to storing the `instant momentum` for each item every
 
 The algorithm then uses the last calculated momentum and its stored timestamp to apply the `momentum decay factor` and/or the `age decay factor` to obtain the rank.
 
-## Optimizing database-backed ranked lists
+### Optimizing database-backed ranked lists
 
 Even after precalculating the momentum with the method above, the computer will still need to perform the mathematical operations of the rank calculation to be able to obtain a ranked list of items. This gets linearly more compute intensive as the number of items grows.
 
@@ -270,7 +276,7 @@ A new database table `itemRanks` is created to hold precalculated ranks:
 
 Every time an event is triggered that might affect an item's momentum, instead of precalculating the item's `momentum` and just storing it, we precalculate the ranks for each `rankSetting` and store them in this table. There is no need to store the momentum, as it's already integrated into the rank itself, and it won't be needed anymore.
 
-### Keeping precalculated ranks up-to-date
+#### Keeping precalculated ranks up-to-date
 
 To account for momentum and rank decay, ranks in the `itemRanks` table need to be updated often. A program is set up to run continuously (or as often as it's deemed sensible) to recalculate the ranks for all items.
 
@@ -282,7 +288,7 @@ For a reliable implementation, instead of recalculating all ranks continuously, 
 
 This method still presents very significant performance downsides, though. If the `rank age threshold` is set too low, the amount of computing necessary to keep up might overwhelm the server and end up continuously updating ranks.
 
-### Attaining performance in large databases
+#### Attaining performance in large databases
 
 Recalculating rank for all items every certain amount of time is too compute expensive in scenarios with a large number of items, and will keep growing linearly as the database keeps growing.
 
@@ -314,12 +320,19 @@ Example result where $h_{max} = `r maxThresholdDays`$ and $t_{max} = `r threshol
 
 To attain this optimization, we add the new field `lastEventTimestamp` to the `itemRanks` table presented above, which is updated everytime a new event is triggered, and which will serve as the basis to calculate $e_{age}$ in the program that keeps ranks up to date.
 
-------------------------------------------------------------------------
+---
 
-# Additional ideas
+## Additional ideas
 
-## Applying the algorithm to other scopes
+### Applying the algorithm to other scopes
 
 - By applying this algorithm to all events for items from a specific user, an indicator will be obtained that reflects the overall engagement with all of the user's items.
 - By applying this algorithm to all events for all users, an indicator will be obtained that reflects the overall engagement of the network.
 - By applying this algorithm to all events generated by users with certain characteristics, an indicator will be obtained that reflects the engagement of users with those characteristics. For example: Users from a certain country, or users in a certain age range.
+
+---
+
+## Author
+Lorenzo Herrera [loren@tin.cat](loren@tin.cat)
+
+Released under the [MIT License](/LICENSE)

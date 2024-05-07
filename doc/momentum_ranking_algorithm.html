@@ -11,7 +11,7 @@
 
 
 
-<title>Momentum ranking algorithm</title>
+<title>momentum_ranking_algorithm.knit</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -368,11 +368,12 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Momentum ranking algorithm</h1>
 
 </div>
 
 
+<div id="momentum-ranking-algorithm" class="section level1">
+<h1>Momentum ranking algorithm</h1>
 <p>A performance oriented algorithm to rank items in a set based on
 their momentary relevance.</p>
 <ul>
@@ -387,8 +388,8 @@ can be created.</li>
 overall ranking of all items, taking only into account their current
 momentum.</li>
 </ul>
-<div id="momentum-vs.-simple-decaying-algorithms" class="section level1">
-<h1>Momentum vs. simple decaying algorithms</h1>
+<div id="momentum-vs.-simple-decaying-algorithms" class="section level2">
+<h2>Momentum vs. simple decaying algorithms</h2>
 <p>Simple decaying algorithms consider all indicators to wear out as
 they get old, without taking into consideration that old items could
 still become relevant if they receive enough momentum.</p>
@@ -398,16 +399,16 @@ that considers items receiving recent attention as relevant, despite
 them being old.</p>
 <hr />
 </div>
-<div id="algorithm" class="section level1">
-<h1>Algorithm</h1>
-<div id="what-is-relevance" class="section level2">
-<h2>What is relevance?</h2>
+<div id="algorithm" class="section level2">
+<h2>Algorithm</h2>
+<div id="what-is-relevance" class="section level3">
+<h3>What is relevance?</h3>
 <p>We define relevance as the measure of interest an item in a set is
 expected to cause to an audience at a certain point in time according to
 a set of indicators, in relation to the other items in the set.</p>
 </div>
-<div id="calculating-momentum" class="section level2">
-<h2>Calculating momentum</h2>
+<div id="calculating-momentum" class="section level3">
+<h3>Calculating momentum</h3>
 <p>The momentum of an item at a given time is calculated as a compound
 value of <code>events</code> that are considered momentum
 <code>indicators</code> (like received comments, likes and views).</p>
@@ -420,23 +421,23 @@ time ago, effectively considering only events triggered within a small
 timeframe before the given time.</li>
 </ul>
 </div>
-<div id="the-momentum-decay-factor" class="section level2">
-<h2>The momentum decay factor</h2>
+<div id="the-momentum-decay-factor" class="section level3">
+<h3>The momentum decay factor</h3>
 <p>The <code>momentum decay factor</code> implements the energy loss
 aspect of momentum over time, causing events to contribute gradually
 less towards an item’s instant momentum as they get older, by using a
 simple exponential formula. It cannot be deactivated.</p>
 </div>
-<div id="the-rank-decay-factor" class="section level2">
-<h2>The rank decay factor</h2>
+<div id="the-rank-decay-factor" class="section level3">
+<h3>The rank decay factor</h3>
 <p>The <code>rank decay factor</code> introduces the ability to get
 rankings that favor recent items, so lists of items relevant to the
 present time can be created.</p>
 <p>By zeroing the <code>rank decay factor</code>, an absolute ranking of
 all items can be obtained.</p>
 </div>
-<div id="no-need-for-a-warmup-factor" class="section level2">
-<h2>No need for a warmup factor</h2>
+<div id="no-need-for-a-warmup-factor" class="section level3">
+<h3>No need for a warmup factor</h3>
 <p>Unlike simplistic decaying ranking algorithms, there is no need to
 apply a warmup factor, because this algorithm only ranks items that have
 already received attention, and thus have some momentum. New items
@@ -444,10 +445,10 @@ without any momentum would not be ranked.</p>
 <hr />
 </div>
 </div>
-<div id="calculating-rank" class="section level1">
-<h1>Calculating rank</h1>
-<div id="instant-momentum-calculation" class="section level2">
-<h2>Instant momentum calculation</h2>
+<div id="calculating-rank" class="section level2">
+<h2>Calculating rank</h2>
+<div id="instant-momentum-calculation" class="section level3">
+<h3>Instant momentum calculation</h3>
 <p>The <code>instant momentum</code> <span class="math inline">\(m\)</span> is an indicator of how relevant an item
 is at a certain point in time, and it’s the compound result of multiple
 weighted indicators, each representing a set of certain events that
@@ -523,8 +524,8 @@ instant momentum calculation is affected by two indicators with
 different weight and dampening parameters (Likes: <span class="math inline">\(l_w = 1\)</span> and <span class="math inline">\(l_f = 0.000005\)</span>, Comments: <span class="math inline">\(c_w = 2.5\)</span> and <span class="math inline">\(c_f = 0.000005\)</span>). Each column represents a
 single event.</p>
 </div>
-<div id="calculating-rank-based-on-instant-momentum" class="section level2">
-<h2>Calculating rank based on instant momentum</h2>
+<div id="calculating-rank-based-on-instant-momentum" class="section level3">
+<h3>Calculating rank based on instant momentum</h3>
 <p>Momentum <span class="math inline">\(m\)</span> already represents a
 rank if all items are to be considered equally. If old items must be
 ranked lower to obtain a newness-relevant ranking <span class="math inline">\(r_t\)</span> that favors newly created items over
@@ -537,12 +538,12 @@ r = m * (1 - t_f)^{t_c}
 <hr />
 </div>
 </div>
-<div id="optimizing-ranking-calculation" class="section level1">
-<h1>Optimizing ranking calculation</h1>
+<div id="optimizing-ranking-calculation" class="section level2">
+<h2>Optimizing ranking calculation</h2>
 <p>Because momentum calculation is compute-expensive, it’s not feasible
 to perform it every time it’s needed.</p>
-<div id="precalculating-momentum" class="section level2">
-<h2>Precalculating momentum</h2>
+<div id="precalculating-momentum" class="section level3">
+<h3>Precalculating momentum</h3>
 <p>Because <code>rank</code> is tied to <code>momentum</code>, and
 items’ momentums change naturally over time, it’s also not possible to
 simply precalculate an item’s <code>rank</code> every time an
@@ -556,8 +557,8 @@ that triggered the calculation.</p>
 timestamp to apply the <code>momentum decay factor</code> and/or the
 <code>age decay factor</code> to obtain the rank.</p>
 </div>
-<div id="optimizing-database-backed-ranked-lists" class="section level2">
-<h2>Optimizing database-backed ranked lists</h2>
+<div id="optimizing-database-backed-ranked-lists" class="section level3">
+<h3>Optimizing database-backed ranked lists</h3>
 <p>Even after precalculating the momentum with the method above, the
 computer will still need to perform the mathematical operations of the
 rank calculation to be able to obtain a ranked list of items. This gets
@@ -619,8 +620,8 @@ just storing it, we precalculate the ranks for each
 <code>rankSetting</code> and store them in this table. There is no need
 to store the momentum, as it’s already integrated into the rank itself,
 and it won’t be needed anymore.</p>
-<div id="keeping-precalculated-ranks-up-to-date" class="section level3">
-<h3>Keeping precalculated ranks up-to-date</h3>
+<div id="keeping-precalculated-ranks-up-to-date" class="section level4">
+<h4>Keeping precalculated ranks up-to-date</h4>
 <p>To account for momentum and rank decay, ranks in the
 <code>itemRanks</code> table need to be updated often. A program is set
 up to run continuously (or as often as it’s deemed sensible) to
@@ -642,8 +643,8 @@ though. If the <code>rank age threshold</code> is set too low, the
 amount of computing necessary to keep up might overwhelm the server and
 end up continuously updating ranks.</p>
 </div>
-<div id="attaining-performance-in-large-databases" class="section level3">
-<h3>Attaining performance in large databases</h3>
+<div id="attaining-performance-in-large-databases" class="section level4">
+<h4>Attaining performance in large databases</h4>
 <p>Recalculating rank for all items every certain amount of time is too
 compute expensive in scenarios with a large number of items, and will
 keep growing linearly as the database keeps growing.</p>
@@ -675,10 +676,10 @@ up to date.</p>
 </div>
 </div>
 </div>
-<div id="additional-ideas" class="section level1">
-<h1>Additional ideas</h1>
-<div id="applying-the-algorithm-to-other-scopes" class="section level2">
-<h2>Applying the algorithm to other scopes</h2>
+<div id="additional-ideas" class="section level2">
+<h2>Additional ideas</h2>
+<div id="applying-the-algorithm-to-other-scopes" class="section level3">
+<h3>Applying the algorithm to other scopes</h3>
 <ul>
 <li>By applying this algorithm to all events for items from a specific
 user, an indicator will be obtained that reflects the overall engagement
@@ -691,6 +692,13 @@ certain characteristics, an indicator will be obtained that reflects the
 engagement of users with those characteristics. For example: Users from
 a certain country, or users in a certain age range.</li>
 </ul>
+<hr />
+</div>
+</div>
+<div id="author" class="section level2">
+<h2>Author</h2>
+<p>Lorenzo Herrera <a href="loren@tin.cat">loren@tin.cat</a></p>
+<p>Released under the <a href="/LICENSE">MIT License</a></p>
 </div>
 </div>
 

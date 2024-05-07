@@ -5,7 +5,7 @@ Suitable for applications where a set of items must be shown in order of current
 
 Attains high performance even in databases with very big number of items, and is optimized to keep ranks relevantly up-to-date, to present relevance-ranked item lists that react close to real-time.
 
-- [Momentum ranking algorithm](doc/momentum_ranking_algorithm.html) presentation
+- [Momentum ranking algorithm](doc/momentum_ranking_algorithm.md) presentation
 
 
 ## Author
