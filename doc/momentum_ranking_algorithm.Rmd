@@ -17,10 +17,10 @@ secondsToDays <- function(seconds) { seconds / 60 / 60 / 24 }
 colorLikes = "lightblue"
 colorComments = "lightpink"
 
-likeMomentumDecayFactor <- .000005
+likeMomentumDecayFactor <- .00001
 likeWeight <- 1
 
-commentMomentumDecayFactor <- .000005
+commentMomentumDecayFactor <- .00001
 commentWeight <- 2.5
 
 maxThresholdDays <- 30
@@ -280,11 +280,11 @@ Every time an event is triggered that might affect an item's momentum, instead o
 
 To account for momentum and rank decay, ranks in the `itemRanks` table need to be updated often. A program is set up to run continuously (or as often as it's deemed sensible) to recalculate the ranks for all items.
 
-For a reliable implementation, instead of recalculating all ranks continuously, only ranks older than a given `rank age threshold` are updated. This will ensure ranks won't ever be updated more often than specified, and distribute compute time evenly.
+For a reliable implementation, instead of recalculating all ranks continuously, only ranks older than a given `rank age threshold` are updated. This ensures ranks won't ever be updated more often than specified, and will distribute compute time evenly.
 
-- The tuning of this `rank age threshold` will determine how far from realtimethe precalculated ranks are.
+- The tuning of this `rank age threshold` will determine how far from realtime the precalculated ranks are.
 
-- Because final ranks are now stored in a table, it becomes trivial (with proper indexation) to obtain ranked lists of items very quickly
+- Because final ranks are now stored in a table, it becomes trivial (with proper indexation) to obtain ranked lists of items very quickly.
 
 This method still presents very significant performance downsides, though. If the `rank age threshold` is set too low, the amount of computing necessary to keep up might overwhelm the server and end up continuously updating ranks.
 
@@ -292,7 +292,7 @@ This method still presents very significant performance downsides, though. If th
 
 Recalculating rank for all items every certain amount of time is too compute expensive in scenarios with a large number of items, and will keep growing linearly as the database keeps growing.
 
-To attain a near-realtime performant and optimal rank calculation that scales properly as the number of items increases, a solution is presented that recalculates rank more often for items that received a momentum-changing `event` recently.
+To attain a near-realtime performant and optimal rank calculation that scales better as the number of items increases, a solution is presented that recalculates rank more often for items that received a momentum-changing `event` recently.
 
 Instead of considering a fixed `rank age threshold`, this threshold is calculated per item as a function of the amount of time that passed since it last received a momentum-changing `event` $e_{age}$, with a simplistic equation that gradually increases the `rank age threshold` $h$ over a given period of time $t_{max}$ days, up to a `max threshold` $h_{max}$ that indicates how old an item's rank can be before being recalculated again:
 

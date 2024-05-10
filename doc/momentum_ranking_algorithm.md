@@ -115,7 +115,7 @@ towards the momentum as newer likes.
 
 <img src="momentum_ranking_algorithm_files/figure-gfm/unnamed-chunk-2-1.png" style="display: block; margin: auto;" />
 
-Example result where $l_w = 1$ and $l_f = 0.000005$, considering all
+Example result where $l_w = 1$ and $l_f = 0.00001$, considering all
 calculations made in seconds
 
 All resulting $m_{ln}$ momentums must be added to obtain the complete
@@ -153,16 +153,16 @@ Other indicators could be:
 <img src="momentum_ranking_algorithm_files/figure-gfm/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
 
 Example showing how much 10 events contribute to the instant momentum
-according to their age, where $l_w = 1$ and $l_f = 0.000005$,
-considering all calculations made in seconds at column zero. Each column
-represents a single *like* event.
+according to their age, where $l_w = 1$ and $l_f = 0.00001$, considering
+all calculations made in seconds at column zero. Each column represents
+a single *like* event.
 
 <img src="momentum_ranking_algorithm_files/figure-gfm/unnamed-chunk-4-1.png" style="display: block; margin: auto;" />
 
 Example showing a more realistic events scenario where an item’s instant
 momentum calculation is affected by two indicators with different weight
-and dampening parameters (Likes: $l_w = 1$ and $l_f = 0.000005$,
-Comments: $c_w = 2.5$ and $c_f = 0.000005$). Each column represents a
+and dampening parameters (Likes: $l_w = 1$ and $l_f = 0.00001$,
+Comments: $c_w = 2.5$ and $c_f = 0.00001$). Each column represents a
 single event.
 
 ### Calculating rank based on instant momentum
@@ -247,14 +247,14 @@ often as it’s deemed sensible) to recalculate the ranks for all items.
 
 For a reliable implementation, instead of recalculating all ranks
 continuously, only ranks older than a given `rank age threshold` are
-updated. This will ensure ranks won’t ever be updated more often than
-specified, and distribute compute time evenly.
+updated. This ensures ranks won’t ever be updated more often than
+specified, and will distribute compute time evenly.
 
 - The tuning of this `rank age threshold` will determine how far from
-  realtimethe precalculated ranks are.
+  realtime the precalculated ranks are.
 
 - Because final ranks are now stored in a table, it becomes trivial
-  (with proper indexation) to obtain ranked lists of items very quickly
+  (with proper indexation) to obtain ranked lists of items very quickly.
 
 This method still presents very significant performance downsides,
 though. If the `rank age threshold` is set too low, the amount of
@@ -268,8 +268,8 @@ compute expensive in scenarios with a large number of items, and will
 keep growing linearly as the database keeps growing.
 
 To attain a near-realtime performant and optimal rank calculation that
-scales properly as the number of items increases, a solution is
-presented that recalculates rank more often for items that received a
+scales better as the number of items increases, a solution is presented
+that recalculates rank more often for items that received a
 momentum-changing `event` recently.
 
 Instead of considering a fixed `rank age threshold`, this threshold is
