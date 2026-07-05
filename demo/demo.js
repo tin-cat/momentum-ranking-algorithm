@@ -14,7 +14,6 @@
 const HOUR = 3600;
 const DAY = 86400;
 const RANK_EPS = 0.3;
-const MAX_POSTS = 80;
 const AGE_TICKS = [
 	HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR,
 	DAY, 2 * DAY, 4 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 90 * DAY, 180 * DAY, 365 * DAY,
@@ -133,7 +132,9 @@ const defaults = {
 	momentumHalfLife: Math.log(2) / -Math.log(1 - 0.00005),
 	newnessOn: true,
 	newnessHalfLife: Math.log(2) / -Math.log(1 - 0.00000001),
-	postsPerHour: 3,
+	// 0.5 posts per hour keeps the natural in-window population around 80
+	// posts at the default 7 day chart range, with no artificial cap
+	postsPerHour: 0.5,
 	likesPerHour: 300,
 	commentsPerHour: 45,
 	skew: 0.9,
@@ -478,7 +479,6 @@ function step(simDt) {
 	}
 
 	updateRanking();
-	cull();
 }
 
 function updateRanking() {
@@ -500,24 +500,9 @@ function updateRanking() {
 	state.top = ranked.slice(0, FEED_MAX);
 }
 
-function cull() {
-	for (const p of state.posts) {
-		if (!p.dying && state.simTime - p.birth > params.ageWindow + 12 * HOUR && p.momentum < 0.05) {
-			p.dying = true;
-		}
-	}
-	if (state.posts.length > MAX_POSTS) {
-		// newborns score zero until their first likes arrive, which made
-		// them the cull's first victims at the cap: give them a grace
-		// period to earn their momentum
-		const excess = state.posts
-			.filter(p => !p.dying && state.simTime - p.birth > 12 * HOUR)
-			.sort((a, b) => a.score - b.score || a.birth - b.birth)
-			.slice(0, Math.max(0, state.posts.length - MAX_POSTS));
-		for (const p of excess) p.dying = true;
-	}
-	state.posts = state.posts.filter(p => !(p.dying && p.alpha <= 0));
-}
+// posts are never removed: even a long-dead unranked post can be revived
+// by a viral hit or stray likes, so the documented formulas alone decide
+// what becomes of every post ever created
 
 /* ---------- layout ---------- */
 
@@ -1035,10 +1020,8 @@ new ResizeObserver(resize).observe(timePanel);
 
 /* ---------- fresh start ---------- */
 
-// the simulation begins from an empty network at Day 1 (Monday) 00:00,
-// then warms up by actually running the engine quietly for a week, so
-// the world and the activity timeline start populated with an accurate,
-// organically grown state
+// the simulation always begins with an empty network: Day 1 (Monday),
+// 00:00, no posts, no history
 function resetSim() {
 	state.simTime = 0;
 	state.posts = [];
@@ -1048,10 +1031,13 @@ function resetSim() {
 	state.postCarry = 0;
 	state.likeCarry = 0;
 	state.commentCarry = 0;
+	contentDeck.length = 0;
+	titleUses.clear();
 	updateRanking();
-	warmup();
 }
 
+// only used by screenshot mode: quietly run the engine for a week so the
+// captured scene is populated
 function warmup() {
 	state.instantEvents = true;
 	const steps = Math.round(7.25 * DAY / TL_BUCKET);
@@ -1065,8 +1051,8 @@ function warmup() {
 /* ---------- screenshot mode ---------- */
 
 function fastForward() {
-	// the world is already warmed up by resetSim: stage a fresh viral and
-	// some in-flight particles for the capture
+	warmup();
+	// stage a fresh viral and some in-flight particles for the capture
 	state.instantEvents = true;
 	startViral(pickOldPost(), 0.5);
 	for (let i = 0; i < 6; i++) step(TL_BUCKET);
