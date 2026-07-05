@@ -109,29 +109,13 @@ a {
 	display: none;
 }
 
-/* Left column: how-to card above the feed */
+/* Left column */
 
 #leftCol {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 	min-height: 0;
-}
-
-#howto {
-	flex: none;
-	padding: 12px 14px;
-}
-
-#howto ul {
-	list-style: none;
-}
-
-#howto li {
-	font-size: 11.5px;
-	line-height: 1.5;
-	color: #9aa7bb;
-	margin: 4px 0;
 }
 
 /* Feed panel */
@@ -141,10 +125,10 @@ a {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	padding: 12px 6px 6px 14px;
+	padding: 10px 6px 6px 14px;
 }
 
-#feed h2, #panel h2 {
+#panel h2 {
 	font-size: 11px;
 	font-weight: 600;
 	text-transform: uppercase;
