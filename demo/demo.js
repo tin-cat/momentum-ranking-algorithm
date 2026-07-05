@@ -567,8 +567,17 @@ function updateParticles(realDt) {
 
 /* ---------- drawing ---------- */
 
+// clear the whole backing store: clearing view.w/h misses the fractional
+// sliver at the right and bottom edges and glyphs smear there
+function clearCanvas(context, cv) {
+	context.save();
+	context.setTransform(1, 0, 0, 1, 0, 0);
+	context.clearRect(0, 0, cv.width, cv.height);
+	context.restore();
+}
+
 function draw(now) {
-	ctx.clearRect(0, 0, view.w, view.h);
+	clearCanvas(ctx, canvas);
 	drawAxes();
 
 	const ordered = state.posts.slice().sort((a, b) => a.momentum - b.momentum);
@@ -697,7 +706,7 @@ function drawParticles() {
 function drawTimeline() {
 	const w = timePanel.clientWidth;
 	const h = timePanel.clientHeight;
-	tlCtx.clearRect(0, 0, w, h);
+	clearCanvas(tlCtx, tlCanvas);
 	const left = 14;
 	const right = w - 14;
 	const top = 26;
@@ -1010,8 +1019,10 @@ new ResizeObserver(resize).observe(timePanel);
 
 /* ---------- fresh start ---------- */
 
-// the simulation always begins with an empty network: Day 1 (Monday),
-// 00:00, no posts, no history
+// the simulation begins from an empty network at Day 1 (Monday) 00:00,
+// then warms up by actually running the engine quietly for a week, so
+// the world and the activity timeline start populated with an accurate,
+// organically grown state
 function resetSim() {
 	state.simTime = 0;
 	state.posts = [];
@@ -1022,20 +1033,28 @@ function resetSim() {
 	state.likeCarry = 0;
 	state.commentCarry = 0;
 	updateRanking();
+	warmup();
+}
+
+function warmup() {
+	state.instantEvents = true;
+	const stepReal = TL_BUCKET / params.speed;
+	const steps = Math.round(7.25 * DAY / TL_BUCKET);
+	for (let i = 0; i < steps; i++) step(stepReal);
+	state.instantEvents = false;
+	// the warmup pushed thousands of event timestamps within a few real
+	// milliseconds: drop them so the HUD rate starts sane
+	state.eventTimes = [];
 }
 
 /* ---------- screenshot mode ---------- */
 
 function fastForward() {
+	// the world is already warmed up by resetSim: stage a fresh viral and
+	// some in-flight particles for the capture
 	state.instantEvents = true;
-	// run the empty network up to Monday of week 2, so a full weekend dip
-	// is visible in the timeline. Each step covers exactly one timeline
-	// bucket, otherwise the activity lines alias into a sawtooth
-	const stepReal = TL_BUCKET / params.speed;
-	const steps = Math.round(7.25 * DAY / TL_BUCKET);
-	for (let i = 0; i < steps; i++) step(stepReal);
-	// one post is freshly viral in the screenshot
 	startViral(pickOldPost(), 0.5);
+	const stepReal = TL_BUCKET / params.speed;
 	for (let i = 0; i < 6; i++) step(stepReal);
 	state.instantEvents = false;
 	for (let i = 0; i < 10; i++) layout(0.5);
