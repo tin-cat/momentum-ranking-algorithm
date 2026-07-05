@@ -14,6 +14,7 @@
 const HOUR = 3600;
 const DAY = 86400;
 const RANK_EPS = 0.3;
+const MAX_POSTS = 80;
 const AGE_TICKS = [
 	HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR,
 	DAY, 2 * DAY, 4 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 90 * DAY, 180 * DAY, 365 * DAY,
@@ -493,11 +494,11 @@ function cull() {
 			p.dying = true;
 		}
 	}
-	if (state.posts.length > 160) {
+	if (state.posts.length > MAX_POSTS) {
 		const excess = state.posts
 			.filter(p => !p.dying)
 			.sort((a, b) => a.score - b.score || a.birth - b.birth)
-			.slice(0, state.posts.length - 160);
+			.slice(0, state.posts.length - MAX_POSTS);
 		for (const p of excess) p.dying = true;
 	}
 	state.posts = state.posts.filter(p => !(p.dying && p.alpha <= 0));
