@@ -5,7 +5,6 @@ A performance oriented algorithm to rank items based on their momentary parametr
 It attains high performance even in databases with a very big number of items, and is optimized to keep ranks relevantly up to date, presenting relevance-ranked item lists that react close to real time.
 
 [![Read the full presentation](https://img.shields.io/badge/Read_the_full_presentation-30363d?style=for-the-badge)](doc/momentum_ranking_algorithm.md)
-[![Live simulation](https://img.shields.io/badge/%E2%96%B6_Live_simulation-d97706?style=for-the-badge)](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)
 
 ## Live demo
 
