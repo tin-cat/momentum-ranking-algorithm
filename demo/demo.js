@@ -405,8 +405,20 @@ function pickOldPost() {
 	return weightedPick(old, p => 1 / (p.momentum + 0.3));
 }
 
-function step(realDt) {
-	const simDt = realDt * params.speed;
+// advance the simulation by a real-time delta, sub-stepped into fixed
+// simulated-time slices: without this, the per-step event caps clip the
+// incoming likes at high speeds while decay stays exact, so results
+// would depend on the chosen speed and frame rate
+function advance(realDt) {
+	let simDt = realDt * params.speed;
+	while (simDt > 0) {
+		const d = Math.min(simDt, TL_BUCKET);
+		step(d);
+		simDt -= d;
+	}
+}
+
+function step(simDt) {
 	state.simTime += simDt;
 
 	const decay = Math.pow(1 - halfLifeToFactor(params.momentumHalfLife), simDt);
@@ -1042,9 +1054,8 @@ function resetSim() {
 
 function warmup() {
 	state.instantEvents = true;
-	const stepReal = TL_BUCKET / params.speed;
 	const steps = Math.round(7.25 * DAY / TL_BUCKET);
-	for (let i = 0; i < steps; i++) step(stepReal);
+	for (let i = 0; i < steps; i++) step(TL_BUCKET);
 	state.instantEvents = false;
 	// the warmup pushed thousands of event timestamps within a few real
 	// milliseconds: drop them so the HUD rate starts sane
@@ -1058,8 +1069,7 @@ function fastForward() {
 	// some in-flight particles for the capture
 	state.instantEvents = true;
 	startViral(pickOldPost(), 0.5);
-	const stepReal = TL_BUCKET / params.speed;
-	for (let i = 0; i < 6; i++) step(stepReal);
+	for (let i = 0; i < 6; i++) step(TL_BUCKET);
 	state.instantEvents = false;
 	for (let i = 0; i < 10; i++) layout(0.5);
 	const warm = state.posts.filter(p => p.rank >= 0 && p.rank < 12);
@@ -1093,7 +1103,7 @@ function frame(now) {
 	// screenshot mode freezes the world after the fast-forward, so the
 	// capture is deterministic no matter when the browser takes it
 	if (!state.paused && !screenshotMode) {
-		step(realDt);
+		advance(realDt);
 		updateParticles(realDt);
 	}
 	layout(realDt);
