@@ -108,9 +108,44 @@ a {
 	display: none;
 }
 
+/* Left column: how-to card above the feed */
+
+#leftCol {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-height: 0;
+}
+
+#howto {
+	flex: none;
+	padding: 12px 14px;
+}
+
+#howto ul {
+	list-style: none;
+}
+
+#howto li {
+	font-size: 11.5px;
+	line-height: 1.5;
+	color: #9aa7bb;
+	margin: 4px 0;
+}
+
+#howto h2 {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: #93a1b8;
+	margin-bottom: 8px;
+}
+
 /* Feed panel */
 
 #feed {
+	flex: 1;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
@@ -146,6 +181,40 @@ a {
 	align-items: center;
 	gap: 9px;
 	transition: top 0.45s ease, opacity 0.3s ease;
+	cursor: pointer;
+}
+
+.feedRow:hover .t {
+	color: #ffd48a;
+}
+
+.feedRow .viralBadge {
+	display: none;
+	flex: none;
+	font-size: 9px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #ffc14d;
+	border: 1px solid rgba(255, 196, 90, 0.6);
+	border-radius: 999px;
+	padding: 2px 6px;
+	margin-right: 6px;
+	animation: viralPulse 1.2s ease-in-out infinite;
+}
+
+.feedRow.viral .viralBadge {
+	display: inline-block;
+}
+
+@keyframes viralPulse {
+	0%, 100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.45;
+	}
 }
 
 .feedRow .pos {
@@ -207,34 +276,6 @@ a {
 	width: 100%;
 	height: 100%;
 	display: block;
-}
-
-#legend {
-	position: absolute;
-	left: 14px;
-	bottom: 10px;
-	font-size: 10.5px;
-	color: #8593a8;
-	pointer-events: none;
-	text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-}
-
-#legend .gradRow {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-}
-
-#legend .grad {
-	display: inline-block;
-	width: 110px;
-	height: 7px;
-	border-radius: 4px;
-	background: linear-gradient(90deg, #4a5568, #7a583c, #e08a2e, #ffc14d, #fff3d6);
-}
-
-#legend .sizeRow {
-	margin-top: 4px;
 }
 
 /* Parameters panel */
@@ -449,12 +490,21 @@ a {
 }
 
 #introCard {
+	position: relative;
 	max-width: 580px;
 	margin: 20px;
 	padding: 28px 30px;
 	background: rgba(18, 23, 33, 0.97);
 	border: 1px solid rgba(255, 255, 255, 0.09);
 	border-radius: 12px;
+}
+
+#introClose {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	font-size: 18px;
+	line-height: 1;
 }
 
 #introCard h1 {
@@ -493,7 +543,7 @@ a {
 		grid-template-columns: minmax(0, 1fr);
 	}
 
-	#feed, #panel {
+	#leftCol, #panel {
 		display: none;
 	}
 

@@ -30,7 +30,8 @@ function halfLifeToFactor(hlSeconds) {
 function fmtDuration(s) {
 	if (s < HOUR) return Math.round(s / 60) + " min";
 	if (s < 2 * DAY) return (s / HOUR).toFixed(1).replace(/\.0$/, "") + " h";
-	return (s / DAY).toFixed(1).replace(/\.0$/, "") + " d";
+	if (s < 400 * DAY) return (s / DAY).toFixed(1).replace(/\.0$/, "") + " d";
+	return (s / (365 * DAY)).toFixed(1).replace(/\.0$/, "") + " y";
 }
 
 function fmtAge(s) {
@@ -45,11 +46,30 @@ function fmtScore(v) {
 	return v.toFixed(2);
 }
 
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function weekdayOf(t) {
+	return WEEKDAYS[Math.floor(t / DAY) % 7]; // Day 1 is a Monday
+}
+
+function isWeekend(t) {
+	const wd = Math.floor(t / DAY) % 7;
+	return wd === 5 || wd === 6;
+}
+
+// global activity level: a 24 h day/night cycle between 50% and 100%
+// (trough around 04:00, peak around 16:00), times 80% on weekends
+function activityFactor(t) {
+	const daily = 0.75 + 0.25 * Math.sin(((t % DAY) / DAY - 4 / 24) * Math.PI * 2 - Math.PI / 2);
+	return daily * (isWeekend(t) ? 0.8 : 1);
+}
+
 function fmtSimClock(t) {
 	const day = Math.floor(t / DAY) + 1;
 	const h = Math.floor((t % DAY) / HOUR);
 	const m = Math.floor((t % HOUR) / 60);
-	return "Day " + day + " · " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+	return "Day " + day + " (" + weekdayOf(t) + ") · " +
+		String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
 }
 
 /* ---------- content ---------- */
@@ -89,12 +109,16 @@ const CONTENT = [
 
 /* ---------- parameters ---------- */
 
+// weights and decay factors match a real production deployment of the
+// algorithm: likes weigh 1 and comments 2.5, both dampened at 5e-5 per
+// second (~3.9 h half-life), and the timeline age decay is 1e-8 per
+// second (~2.2 year half-life)
 const defaults = {
 	likeWeight: 1,
 	commentWeight: 2.5,
-	momentumHalfLife: Math.log(2) / -Math.log(1 - 0.00001), // the spec's example l_f = 0.00001 per second
+	momentumHalfLife: Math.log(2) / -Math.log(1 - 0.00005),
 	newnessOn: true,
-	newnessHalfLife: 2 * DAY,
+	newnessHalfLife: Math.log(2) / -Math.log(1 - 0.00000001),
 	postsPerHour: 3,
 	likesPerHour: 300,
 	commentsPerHour: 45,
@@ -111,13 +135,12 @@ const state = {
 	posts: [],
 	particles: [],
 	ripples: [],
-	bursts: [],
 	paused: false,
 	nextId: 1,
 	postCarry: 0,
 	likeCarry: 0,
 	commentCarry: 0,
-	// no persistent user avatars: events originate from randomOrigin()
+	// no persistent user avatars: events originate from spawnPoint()
 	rankedCount: 0,
 	top: [],
 	hoverPost: null,
@@ -127,6 +150,7 @@ const state = {
 };
 
 let contentDeck = [];
+const titleUses = new Map();
 
 function nextContent() {
 	if (!contentDeck.length) {
@@ -141,11 +165,16 @@ function nextContent() {
 
 function makePost(birth) {
 	const c = nextContent();
+	const uses = (titleUses.get(c[1]) || 0) + 1;
+	titleUses.set(c[1], uses);
 	return {
 		id: state.nextId++,
 		emoji: c[0],
-		title: c[1],
+		title: uses > 1 ? c[1] + " · " + uses : c[1],
 		birth,
+		// how interesting this post is to the community, fixed at creation:
+		// most posts are mediocre, a few are gems, some interest nobody
+		interest: Math.random() < 0.12 ? 0 : Math.pow(Math.random(), 1.6),
 		accLike: 0,
 		accComment: 0,
 		likes: 0,
@@ -153,6 +182,12 @@ function makePost(birth) {
 		momentum: 0,
 		score: 0,
 		rank: -1,
+		viralStart: 0,
+		viralUntil: 0,
+		viralStrength: 0,
+		viralCount: 0,
+		viralLikeCarry: 0,
+		viralCommentCarry: 0,
 		x: 0,
 		y: 0,
 		hasPos: false,
@@ -221,11 +256,11 @@ function computeView() {
 	view.plotBottom = view.shelfY - 44;
 }
 
-// events fly in from the unseen audience below the chart
-function randomOrigin() {
+// events drop in from just above the post they are destined to
+function spawnPoint(post) {
 	return {
-		x: rand(view.plotLeft - 20, view.plotRight + 20),
-		y: view.h + 12,
+		x: post.x + rand(-28, 28),
+		y: Math.max(-18, post.y - rand(90, 170)),
 	};
 }
 
@@ -270,7 +305,7 @@ function weightedPick(items, weightFn) {
 		weights[i] = weightFn(items[i]);
 		total += weights[i];
 	}
-	if (total <= 0) return pick(items);
+	if (total <= 0) return null;
 	let r = Math.random() * total;
 	for (let i = 0; i < items.length; i++) {
 		r -= weights[i];
@@ -283,48 +318,70 @@ function pickTarget() {
 	const alive = state.posts.filter(p => !p.dying);
 	if (!alive.length) return null;
 	if (Math.random() < 0.3) {
-		// discovery: fresh posts get seen regardless of momentum
-		return weightedPick(alive, p => Math.exp(-((state.simTime - p.birth) / HOUR) / 18) + 0.002);
+		// discovery: fresh posts get seen regardless of momentum, but only
+		// as far as they interest the community
+		return weightedPick(alive, p =>
+			(Math.exp(-((state.simTime - p.birth) / HOUR) / 18) + 0.002) * p.interest);
 	}
-	// feed exposure: attention goes preferentially to what is already hot
-	return weightedPick(alive, p => Math.pow(p.momentum + 0.05, params.skew));
+	// feed exposure: higher ranked posts are more visible, so they attract
+	// more attention (Zipf-like falloff over rank positions), scaled by how
+	// interesting each post actually is
+	return weightedPick(alive, p =>
+		(p.rank >= 0 ? Math.pow(p.rank + 1, -params.skew) : 0.01) * p.interest);
 }
 
 let particleBudget = 0;
 
-function emitEvent(type) {
-	const post = pickTarget();
-	if (!post) return;
+function sendEvent(post, type) {
 	if (state.instantEvents || particleBudget <= 0 || state.particles.length > 160) {
 		applyEvent(post, type);
 		return;
 	}
 	particleBudget--;
-	const u = randomOrigin();
+	const u = spawnPoint(post);
 	state.particles.push({
 		post,
 		type,
 		x0: u.x,
 		y0: u.y,
-		cx: (u.x + post.x) / 2 + rand(-130, 130),
-		cy: Math.min(u.y, post.y) - rand(50, 170),
+		cx: (u.x + post.x) / 2 + rand(-24, 24),
+		cy: (u.y + post.y) / 2,
 		t: 0,
-		dur: rand(0.5, 0.85),
+		dur: rand(0.45, 0.7),
 	});
 }
 
-function startBurst(post, count) {
-	if (!post) return;
-	state.bursts.push({
-		post,
-		remaining: count,
-		nextAt: state.simTime,
-		interval: (45 * 60) / count, // burst spread over ~45 simulated minutes
-	});
+function emitEvent(type) {
+	const post = pickTarget();
+	if (post) sendEvent(post, type);
+}
+
+// a viral post receives an extra stream of likes and comments for a few
+// hours, sized as a share of the whole network's rate: a fast ramp up,
+// then a slow fade
+function startViral(post, strength) {
+	if (!post || post.dying) return;
+	if (isViral(post)) {
+		// going viral while already viral compounds: twice as strong, then
+		// three times, and so on
+		post.viralStrength += strength;
+		post.viralCount++;
+		post.viralUntil = Math.max(post.viralUntil, state.simTime + rand(4, 8) * HOUR);
+		return;
+	}
+	post.viralStart = state.simTime;
+	post.viralUntil = state.simTime + rand(4, 8) * HOUR;
+	post.viralStrength = strength;
+	post.viralCount = 1;
+}
+
+function isViral(p) {
+	return p.viralUntil > state.simTime;
 }
 
 function pickOldPost() {
-	const old = state.posts.filter(p => !p.dying && state.simTime - p.birth > 2 * DAY);
+	const old = state.posts.filter(p =>
+		!p.dying && p.interest > 0 && state.simTime - p.birth > 2 * DAY);
 	if (!old.length) return null;
 	// prefer the coldest ones, where the comeback is most dramatic
 	return weightedPick(old, p => 1 / (p.momentum + 0.3));
@@ -341,15 +398,16 @@ function step(realDt) {
 	}
 
 	const dtHours = simDt / HOUR;
+	const act = activityFactor(state.simTime);
 
-	state.postCarry += params.postsPerHour * dtHours;
+	state.postCarry += params.postsPerHour * act * dtHours;
 	while (state.postCarry >= 1) {
 		state.postCarry -= 1;
 		state.posts.push(makePost(state.simTime));
 	}
 
-	state.likeCarry += params.likesPerHour * dtHours;
-	state.commentCarry += params.commentsPerHour * dtHours;
+	state.likeCarry += params.likesPerHour * act * dtHours;
+	state.commentCarry += params.commentsPerHour * act * dtHours;
 	let likes = Math.min(200, Math.floor(state.likeCarry));
 	let comments = Math.min(60, Math.floor(state.commentCarry));
 	state.likeCarry -= Math.floor(state.likeCarry);
@@ -357,33 +415,31 @@ function step(realDt) {
 	while (likes-- > 0) emitEvent("like");
 	while (comments-- > 0) emitEvent("comment");
 
-	for (const b of state.bursts) {
-		while (b.remaining > 0 && b.nextAt <= state.simTime && !b.post.dying) {
-			b.remaining--;
-			b.nextAt += b.interval * rand(0.4, 1.6);
-			if (state.instantEvents || particleBudget <= 0) {
-				applyEvent(b.post, "like");
-			} else {
-				particleBudget--;
-				const u = randomOrigin();
-				state.particles.push({
-					post: b.post,
-					type: "like",
-					x0: u.x,
-					y0: u.y,
-					cx: (u.x + b.post.x) / 2 + rand(-130, 130),
-					cy: Math.min(u.y, b.post.y) - rand(50, 170),
-					t: 0,
-					dur: rand(0.5, 0.85),
-				});
-			}
-		}
+	const commentRatio = params.commentsPerHour / Math.max(1, params.likesPerHour);
+	for (const p of state.posts) {
+		if (!isViral(p) || p.dying) continue;
+		const u = (state.simTime - p.viralStart) / (p.viralUntil - p.viralStart);
+		const shape = u < 0.2 ? u / 0.2 : 1 - (u - 0.2) / 0.8;
+		const rate = params.likesPerHour * p.viralStrength * shape * act;
+		p.viralLikeCarry += rate * dtHours;
+		p.viralCommentCarry += rate * commentRatio * dtHours;
+		let vl = Math.min(40, Math.floor(p.viralLikeCarry));
+		let vc = Math.min(15, Math.floor(p.viralCommentCarry));
+		p.viralLikeCarry -= Math.floor(p.viralLikeCarry);
+		p.viralCommentCarry -= Math.floor(p.viralCommentCarry);
+		while (vl-- > 0) sendEvent(p, "like");
+		while (vc-- > 0) sendEvent(p, "comment");
 	}
-	state.bursts = state.bursts.filter(b => b.remaining > 0 && !b.post.dying);
 
-	// occasionally an old post resurfaces on its own, the algorithm's signature moment
+	// occasionally an old post goes viral on its own, the algorithm's signature moment
 	if (Math.random() < dtHours * 0.06) {
-		startBurst(pickOldPost(), Math.round(rand(30, 70)));
+		startViral(pickOldPost(), 0.3);
+	}
+
+	// and rarely, a high-interest post catches fire spontaneously
+	if (Math.random() < dtHours * 0.04) {
+		const candidates = state.posts.filter(p => !p.dying && !isViral(p) && p.interest > 0.5);
+		startViral(weightedPick(candidates, p => Math.pow(p.interest, 3)), 0.4);
 	}
 
 	while (state.series.length && state.series[0].t < state.simTime - TL_SPAN - 2 * TL_BUCKET) {
@@ -578,6 +634,17 @@ function drawPost(p) {
 	ctx.textBaseline = "middle";
 	ctx.fillText(p.emoji, p.x, p.y + 1);
 
+	if (isViral(p)) {
+		const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+		ctx.strokeStyle = "rgba(255,196,90," + (0.35 + 0.4 * pulse).toFixed(2) + ")";
+		ctx.lineWidth = 2;
+		ctx.setLineDash([5, 4]);
+		ctx.beginPath();
+		ctx.arc(p.x, p.y, r + 6 + pulse * 2, 0, Math.PI * 2);
+		ctx.stroke();
+		ctx.setLineDash([]);
+	}
+
 	if (p.rank >= 0 && p.rank < 5) {
 		ctx.font = "600 11px sans-serif";
 		ctx.fillStyle = "rgba(255,217,138,0.95)";
@@ -623,10 +690,21 @@ function drawTimeline() {
 	const xOf = t => left + ((t - t0) / TL_SPAN) * (right - left);
 
 	tlCtx.save();
+
+	// weekends run at 80% activity: shade them so the dip reads at a glance
+	for (let d = Math.floor(t0 / DAY) * DAY; d < t1; d += DAY) {
+		if (d < 0 || !isWeekend(d)) continue;
+		const xa = xOf(Math.max(d, t0));
+		const xb = xOf(Math.min(d + DAY, t1));
+		tlCtx.fillStyle = "rgba(255,255,255,0.035)";
+		tlCtx.fillRect(xa, 6, xb - xa, bottom - 6);
+	}
+
 	tlCtx.font = "10.5px sans-serif";
 	tlCtx.textBaseline = "top";
 	tlCtx.textAlign = "left";
 	for (let t = Math.ceil(t0 / (6 * HOUR)) * 6 * HOUR; t <= t1; t += 6 * HOUR) {
+		if (t < 0) continue; // before the network existed
 		const isDay = t % DAY === 0;
 		const x = xOf(t);
 		tlCtx.strokeStyle = isDay ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.05)";
@@ -636,7 +714,7 @@ function drawTimeline() {
 		tlCtx.stroke();
 		if (isDay) {
 			tlCtx.fillStyle = "rgba(160,175,195,0.75)";
-			tlCtx.fillText("Day " + (Math.round(t / DAY) + 1), x + 5, 8);
+			tlCtx.fillText("Day " + (Math.round(t / DAY) + 1) + " · " + weekdayOf(t), x + 5, 8);
 		}
 	}
 	tlCtx.strokeStyle = "rgba(255,255,255,0.1)";
@@ -697,11 +775,19 @@ function updateHud(now) {
 	lastFeedUpdate = now;
 
 	clockEl.textContent = fmtSimClock(state.simTime) + (state.paused ? " · paused" : "");
-	const cutoff = performance.now() - 2000;
-	state.eventTimes = state.eventTimes.filter(t => t >= cutoff);
+	let rate;
+	if (screenshotMode && state.series.length > 1) {
+		// the frozen world has no live event flow: estimate from the series
+		const b = state.series[state.series.length - 2];
+		rate = ((b.likes + b.comments) / TL_BUCKET) * params.speed;
+	} else {
+		const cutoff = performance.now() - 2000;
+		state.eventTimes = state.eventTimes.filter(t => t >= cutoff);
+		rate = state.eventTimes.length / 2;
+	}
 	statsEl.textContent =
 		state.posts.length + " posts · " + state.rankedCount + " ranked · " +
-		(state.eventTimes.length / 2).toFixed(1) + " interactions/s";
+		rate.toFixed(1) + " interactions/s";
 
 	updateFeed();
 }
@@ -717,9 +803,15 @@ function updateFeed() {
 			el.className = "feedRow";
 			el.innerHTML =
 				'<span class="pos"></span><span class="em"></span>' +
-				'<span class="txt"><span class="t"></span><span class="meta"></span></span>';
+				'<span class="txt"><span class="t"></span><span class="meta"></span></span>' +
+				'<span class="viralBadge">viral</span>';
 			el.querySelector(".em").textContent = p.emoji;
 			el.querySelector(".t").textContent = p.title;
+			el.title = "Click to make this post go viral";
+			el.addEventListener("click", () => {
+				startViral(p, 0.5);
+				state.ripples.push({ x: p.x, y: p.y, r: radiusOf(p), t: 0, type: "like" });
+			});
 			el.style.top = i * 52 + "px";
 			el.style.opacity = "0";
 			feedRowsEl.appendChild(el);
@@ -727,6 +819,12 @@ function updateFeed() {
 			feedEls.set(p.id, el);
 		}
 		el.style.top = i * 52 + "px";
+		const viral = isViral(p);
+		el.classList.toggle("viral", viral);
+		if (viral) {
+			el.querySelector(".viralBadge").textContent =
+				p.viralCount > 1 ? "viral x" + p.viralCount : "viral";
+		}
 		el.querySelector(".pos").textContent = "#" + (i + 1);
 		el.querySelector(".meta").textContent =
 			"♥ " + p.likes + " · 💬 " + p.comments + " · rank score " + fmtScore(p.score);
@@ -774,13 +872,15 @@ canvas.addEventListener("mousemove", e => {
 		const p = state.hoverPost;
 		tooltipEl.hidden = false;
 		tooltipEl.innerHTML =
-			'<div class="tt"></div><div class="meta"></div><div class="hint">click = like · shift + click = comment</div>';
+			'<div class="tt"></div><div class="meta"></div><div class="hint">click = make this post go viral</div>';
 		tooltipEl.querySelector(".tt").textContent = p.emoji + " " + p.title;
 		tooltipEl.querySelector(".meta").textContent =
 			"age " + fmtAge(state.simTime - p.birth) +
+			" · interest " + Math.round(p.interest * 100) + "%" +
 			" · ♥ " + p.likes + " · 💬 " + p.comments +
 			" · momentum " + fmtScore(p.momentum) +
-			(p.rank >= 0 ? " · rank #" + (p.rank + 1) : " · unranked");
+			(p.rank >= 0 ? " · rank #" + (p.rank + 1) : " · unranked") +
+			(isViral(p) ? " · viral" + (p.viralCount > 1 ? " x" + p.viralCount : "") : "");
 		tooltipEl.style.left = Math.min(e.clientX + 16, innerWidth - 290) + "px";
 		tooltipEl.style.top = e.clientY + 16 + "px";
 		canvas.style.cursor = "pointer";
@@ -794,18 +894,8 @@ canvas.addEventListener("click", e => {
 	const c = canvasXY(e);
 	const p = postAt(c.x, c.y);
 	if (!p) return;
-	const type = e.shiftKey ? "comment" : "like";
-	const u = randomOrigin();
-	state.particles.push({
-		post: p,
-		type,
-		x0: u.x,
-		y0: u.y,
-		cx: (u.x + p.x) / 2 + rand(-130, 130),
-		cy: Math.min(u.y, p.y) - rand(50, 170),
-		t: 0,
-		dur: 0.45,
-	});
+	startViral(p, 0.5);
+	state.ripples.push({ x: p.x, y: p.y, r: radiusOf(p), t: 0, type: "like" });
 });
 
 /* ---------- controls ---------- */
@@ -818,7 +908,7 @@ const controlDefs = [
 		sub: v => "momentum decay factor ≈ " + halfLifeToFactor(v).toExponential(1) + " per second",
 	},
 	{
-		id: "newnessHalfLife", min: 6 * HOUR, max: 14 * DAY, log: true, fmt: fmtDuration,
+		id: "newnessHalfLife", min: 6 * HOUR, max: 4 * 365 * DAY, log: true, fmt: fmtDuration,
 		sub: v => "age decay factor ≈ " + halfLifeToFactor(v).toExponential(1) + " per second",
 	},
 	{ id: "postsPerHour", min: 0.2, max: 12, log: true, fmt: v => v.toFixed(1) + " / sim hour" },
@@ -875,19 +965,9 @@ function setPaused(v) {
 
 pauseBtn.addEventListener("click", () => setPaused(!state.paused));
 
-document.getElementById("boostBtn").addEventListener("click", () => {
-	startBurst(pickOldPost() || pick(state.posts.filter(p => !p.dying)), Math.round(rand(35, 70)));
-});
-
 document.getElementById("resetBtn").addEventListener("click", () => {
 	Object.assign(params, defaults);
-	state.posts = [];
-	state.particles = [];
-	state.ripples = [];
-	state.bursts = [];
-	state.series = [];
-	state.nextId = 1;
-	seed();
+	resetSim();
 	syncControls();
 });
 
@@ -901,11 +981,12 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
 });
 
 const intro = document.getElementById("intro");
-document.getElementById("startBtn").addEventListener("click", () => {
-	intro.classList.add("hidden");
-	setPaused(false);
-});
+document.getElementById("introClose").addEventListener("click", () => intro.classList.add("hidden"));
 document.getElementById("helpBtn").addEventListener("click", () => intro.classList.remove("hidden"));
+document.getElementById("moreHelp").addEventListener("click", e => {
+	e.preventDefault();
+	intro.classList.remove("hidden");
+});
 
 document.addEventListener("keydown", e => {
 	if (e.code === "Space" && !intro.contains(document.activeElement)) {
@@ -918,40 +999,20 @@ window.addEventListener("resize", resize);
 new ResizeObserver(resize).observe(chartPanel);
 new ResizeObserver(resize).observe(timePanel);
 
-/* ---------- seeding ---------- */
+/* ---------- fresh start ---------- */
 
-function seed() {
-	// the network has already been running for a while when the visitor arrives
-	state.simTime = 3 * DAY;
-	for (let t = state.simTime - TL_SPAN; t < state.simTime - TL_BUCKET; t += TL_BUCKET) {
-		const base = params.likesPerHour * (TL_BUCKET / HOUR);
-		const jitter = rand(0.82, 1.18);
-		state.series.push({
-			t: Math.floor(t / TL_BUCKET) * TL_BUCKET,
-			likes: Math.max(0, Math.round(base * jitter)),
-			comments: Math.max(0, Math.round(
-				base * jitter * (params.commentsPerHour / Math.max(1, params.likesPerHour)) * rand(0.85, 1.15)
-			)),
-		});
-	}
-	for (let i = 0; i < 26; i++) {
-		const age = Math.pow(Math.random(), 1.4) * 6.2 * DAY;
-		const p = makePost(state.simTime - age);
-		const popularity = Math.exp(rand(-1, 1.6));
-		p.likes = Math.round(popularity * (10 + (age / DAY) * 55) * rand(0.5, 1.5));
-		p.comments = Math.round(p.likes * rand(0.08, 0.2));
-		const warmth = Math.exp(-(age / DAY) / rand(0.8, 1.6));
-		p.accLike = popularity * 26 * warmth * rand(0.3, 1.2);
-		p.accComment = p.accLike * rand(0.1, 0.25);
-		state.posts.push(p);
-	}
-	// a couple of brand new posts just entering the system
-	for (let i = 0; i < 2; i++) {
-		const p = makePost(state.simTime - rand(0, 2 * HOUR));
-		p.likes = Math.round(rand(0, 6));
-		p.accLike = p.likes * rand(0.6, 1);
-		state.posts.push(p);
-	}
+// the simulation always begins with an empty network: Day 1 (Monday),
+// 00:00, no posts, no history
+function resetSim() {
+	state.simTime = 0;
+	state.posts = [];
+	state.particles = [];
+	state.ripples = [];
+	state.series = [];
+	state.nextId = 1;
+	state.postCarry = 0;
+	state.likeCarry = 0;
+	state.commentCarry = 0;
 	updateRanking();
 }
 
@@ -959,20 +1020,29 @@ function seed() {
 
 function fastForward() {
 	state.instantEvents = true;
-	for (let i = 0; i < 400; i++) step(0.033);
+	// run the empty network up to Monday of week 2, so a full weekend dip
+	// is visible in the timeline. Each step covers exactly one timeline
+	// bucket, otherwise the activity lines alias into a sawtooth
+	const stepReal = TL_BUCKET / params.speed;
+	const steps = Math.round(7.25 * DAY / TL_BUCKET);
+	for (let i = 0; i < steps; i++) step(stepReal);
+	// one post is freshly viral in the screenshot
+	startViral(pickOldPost(), 0.5);
+	for (let i = 0; i < 6; i++) step(stepReal);
 	state.instantEvents = false;
 	for (let i = 0; i < 10; i++) layout(0.5);
 	const warm = state.posts.filter(p => p.rank >= 0 && p.rank < 12);
 	for (let i = 0; i < 9; i++) {
 		const post = pick(warm.length ? warm : state.posts);
-		const u = randomOrigin();
+		if (!post) break;
+		const u = spawnPoint(post);
 		state.particles.push({
 			post,
 			type: Math.random() < 0.75 ? "like" : "comment",
 			x0: u.x,
 			y0: u.y,
-			cx: (u.x + post.x) / 2 + rand(-130, 130),
-			cy: Math.min(u.y, post.y) - rand(50, 170),
+			cx: (u.x + post.x) / 2 + rand(-24, 24),
+			cy: (u.y + post.y) / 2,
 			t: rand(0.15, 0.75),
 			dur: 1,
 		});
@@ -982,13 +1052,16 @@ function fastForward() {
 /* ---------- main loop ---------- */
 
 let lastFrame = performance.now();
+const screenshotMode = new URLSearchParams(location.search).has("screenshot");
 
 function frame(now) {
 	const realDt = clamp((now - lastFrame) / 1000, 0, 0.25);
 	lastFrame = now;
 	particleBudget = 22;
 
-	if (!state.paused) {
+	// screenshot mode freezes the world after the fast-forward, so the
+	// capture is deterministic no matter when the browser takes it
+	if (!state.paused && !screenshotMode) {
 		step(realDt);
 		updateParticles(realDt);
 	}
@@ -1000,15 +1073,11 @@ function frame(now) {
 }
 
 resize();
-seed();
+resetSim();
 syncControls();
 
-if (new URLSearchParams(location.search).has("screenshot")) {
-	intro.classList.add("hidden");
+if (screenshotMode) {
 	fastForward();
-} else {
-	// hold the simulation until the visitor starts it from the intro
-	setPaused(true);
 }
 
 requestAnimationFrame(frame);

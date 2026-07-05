@@ -24,19 +24,26 @@
 		</header>
 
 		<main id="row">
-			<section id="feed" class="card">
-				<h2>Top of the feed</h2>
-				<div id="feedScroll">
-					<div id="feedRows"></div>
-				</div>
-			</section>
+			<div id="leftCol">
+				<section id="howto" class="card">
+					<h2>How to read this</h2>
+					<ul>
+						<li>Bubbles are posts. Likes <span class="likeGlyph">♥</span> and comments 💬 rain onto them.</li>
+						<li>Height = rank · left = older · color = momentum · size = attention.</li>
+						<li>Click a post to make it go viral.</li>
+						<li><a href="#" id="moreHelp">Full explanation</a></li>
+					</ul>
+				</section>
+				<section id="feed" class="card">
+					<h2>Top of the feed</h2>
+					<div id="feedScroll">
+						<div id="feedRows"></div>
+					</div>
+				</section>
+			</div>
 
 			<section id="chartPanel" class="card">
 				<canvas id="scene"></canvas>
-				<div id="legend">
-					<div class="gradRow"><span>cold</span><span class="grad"></span><span>hot momentum</span></div>
-					<div class="sizeRow">size = total attention received · height = rank · left = older</div>
-				</div>
 			</section>
 
 			<aside id="panel" class="card">
@@ -83,7 +90,7 @@
 					<label class="ctl">
 						<span class="row"><span>Virality skew</span><em id="skewVal"></em></span>
 						<input type="range" id="skew" min="0" max="1000" step="1">
-						<small class="sub">How strongly attention concentrates on already hot posts</small>
+						<small class="sub">How strongly attention concentrates on top ranked posts, which get more visibility</small>
 					</label>
 
 					<h3>Playback</h3>
@@ -101,7 +108,6 @@
 				</div>
 				<div id="panelFoot">
 					<button class="btn" id="pauseBtn">Pause</button>
-					<button class="btn" id="boostBtn">Revive an old post</button>
 					<button class="btn" id="resetBtn">Reset</button>
 				</div>
 			</aside>
@@ -119,8 +125,9 @@
 
 	<div id="tooltip" hidden></div>
 
-	<div id="intro">
+	<div id="intro" class="hidden">
 		<div id="introCard">
+			<button class="tool" id="introClose" title="Close">×</button>
 			<h1>Momentum ranking algorithm</h1>
 			<p class="tag">A live simulation of a social feed ranked by momentum.</p>
 			<ul>
@@ -130,8 +137,8 @@
 				<li><strong>Size</strong> is the total attention a post has ever received.</li>
 			</ul>
 			<p>Watch old, cold posts rocket back to the top when a burst of new likes hits them. That is what sets momentum ranking apart from simple decay.</p>
-			<p>Click any post to like it yourself, shift-click to comment, and tweak every parameter of the algorithm in the panel on the right.</p>
-			<button class="btn primary" id="startBtn">Start the simulation</button>
+			<p>Activity follows a day and night cycle with quieter weekends; the timeline at the bottom shows the pulse. Every post is born with a fixed level of interest to the community: interesting posts attract likes and comments, posts that interest nobody never receive any.</p>
+			<p><strong>Click any post to make it go viral</strong>: it will receive a strong stream of likes and comments for a few hours and climb the ranking. Tweak every parameter of the algorithm in the panel on the right.</p>
 		</div>
 	</div>
 

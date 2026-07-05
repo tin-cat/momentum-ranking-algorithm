@@ -8,9 +8,9 @@ It attains high performance even in databases with a very big number of items, a
 
 ## Live demo
 
-**[Open the interactive simulation](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)** to watch the algorithm rank a simulated social feed in real time: posts enter the system, receive likes and comments from simulated users, heat up, climb the ranking and cool down as attention fades. Old posts visibly come back to the top when a burst of new likes hits them.
+**[Open the interactive simulation](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)** to watch the algorithm rank a simulated social feed in real time: posts enter the system, receive likes and comments from simulated users, heat up, climb the ranking and cool down as attention fades. Old posts visibly come back to the top when a burst of new likes hits them, and network activity follows day and night cycles with quieter weekends.
 
-Every parameter of the algorithm can be tweaked live: event weights, decay factors, the newness factor and the behavior of the simulated network. You can also like and comment posts yourself and watch how it affects their rank.
+Every parameter of the algorithm can be tweaked live: event weights, decay factors, the newness factor and the behavior of the simulated network. You can also click any post to make it go viral and watch it climb the ranking.
 
 [![Interactive simulation of the momentum ranking algorithm](demo/screenshot.png)](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)
 
