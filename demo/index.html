@@ -7,93 +7,114 @@
 	<link rel="stylesheet" href="demo.css">
 </head>
 <body>
-	<canvas id="scene"></canvas>
+	<div id="app">
+		<header id="topbar" class="card">
+			<h1>Momentum ranking algorithm</h1>
+			<p id="clock"></p>
+			<p id="stats"></p>
+			<div id="topbarRight">
+				<span id="credit">
+					Lorenzo Herrera · <a href="https://tin.cat" target="_blank" rel="noopener">tin.cat</a> ·
+					<a href="https://github.com/tin-cat/momentum-ranking-algorithm" target="_blank" rel="noopener">specification</a>
+				</span>
+				<button class="tool" id="panelToggle" title="Parameters">⚙</button>
+				<button class="tool" id="helpBtn" title="Help">?</button>
+				<button class="tool" id="fullscreenBtn" title="Fullscreen">⛶</button>
+			</div>
+		</header>
 
-	<header id="hud">
-		<h1>Momentum ranking algorithm</h1>
-		<p id="clock"></p>
-		<p id="stats"></p>
-	</header>
+		<main id="row">
+			<section id="feed" class="card">
+				<h2>Top of the feed</h2>
+				<div id="feedScroll">
+					<div id="feedRows"></div>
+				</div>
+			</section>
 
-	<section id="feed">
-		<h2>Top of the feed</h2>
-		<div id="feedRows"></div>
-	</section>
+			<section id="chartPanel" class="card">
+				<canvas id="scene"></canvas>
+				<div id="legend">
+					<div class="gradRow"><span>cold</span><span class="grad"></span><span>hot momentum</span></div>
+					<div class="sizeRow">size = total attention received · height = rank · left = older</div>
+				</div>
+			</section>
 
-	<aside id="panel">
-		<h2>Parameters</h2>
+			<aside id="panel" class="card">
+				<div id="panelBody">
+					<h2>Parameters</h2>
 
-		<h3>Ranking</h3>
-		<label class="ctl">
-			<span class="row"><span>Like weight</span><em id="likeWeightVal"></em></span>
-			<input type="range" id="likeWeight" min="0" max="1000" step="1">
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Comment weight</span><em id="commentWeightVal"></em></span>
-			<input type="range" id="commentWeight" min="0" max="1000" step="1">
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Momentum half-life</span><em id="momentumHalfLifeVal"></em></span>
-			<input type="range" id="momentumHalfLife" min="0" max="1000" step="1">
-			<small class="sub" id="momentumHalfLifeSub"></small>
-		</label>
-		<label class="ctl checkbox">
-			<span class="row"><span>Newness decay (rank decay)</span><input type="checkbox" id="newnessOn"></span>
-			<small class="sub">Off = absolute ranking by momentum only</small>
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Newness half-life</span><em id="newnessHalfLifeVal"></em></span>
-			<input type="range" id="newnessHalfLife" min="0" max="1000" step="1">
-			<small class="sub" id="newnessHalfLifeSub"></small>
-		</label>
+					<h3>Ranking</h3>
+					<label class="ctl">
+						<span class="row"><span>Like weight</span><em id="likeWeightVal"></em></span>
+						<input type="range" id="likeWeight" min="0" max="1000" step="1">
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Comment weight</span><em id="commentWeightVal"></em></span>
+						<input type="range" id="commentWeight" min="0" max="1000" step="1">
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Momentum half-life</span><em id="momentumHalfLifeVal"></em></span>
+						<input type="range" id="momentumHalfLife" min="0" max="1000" step="1">
+						<small class="sub" id="momentumHalfLifeSub"></small>
+					</label>
+					<label class="ctl checkbox">
+						<span class="row"><span>Newness decay (rank decay)</span><input type="checkbox" id="newnessOn"></span>
+						<small class="sub">Off = absolute ranking by momentum only</small>
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Newness half-life</span><em id="newnessHalfLifeVal"></em></span>
+						<input type="range" id="newnessHalfLife" min="0" max="1000" step="1">
+						<small class="sub" id="newnessHalfLifeSub"></small>
+					</label>
 
-		<h3>Simulated network</h3>
-		<label class="ctl">
-			<span class="row"><span>New posts</span><em id="postsPerHourVal"></em></span>
-			<input type="range" id="postsPerHour" min="0" max="1000" step="1">
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Likes</span><em id="likesPerHourVal"></em></span>
-			<input type="range" id="likesPerHour" min="0" max="1000" step="1">
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Comments</span><em id="commentsPerHourVal"></em></span>
-			<input type="range" id="commentsPerHour" min="0" max="1000" step="1">
-		</label>
-		<label class="ctl">
-			<span class="row"><span>Virality skew</span><em id="skewVal"></em></span>
-			<input type="range" id="skew" min="0" max="1000" step="1">
-			<small class="sub">How strongly attention concentrates on already hot posts</small>
-		</label>
+					<h3>Simulated network</h3>
+					<label class="ctl">
+						<span class="row"><span>New posts</span><em id="postsPerHourVal"></em></span>
+						<input type="range" id="postsPerHour" min="0" max="1000" step="1">
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Likes</span><em id="likesPerHourVal"></em></span>
+						<input type="range" id="likesPerHour" min="0" max="1000" step="1">
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Comments</span><em id="commentsPerHourVal"></em></span>
+						<input type="range" id="commentsPerHour" min="0" max="1000" step="1">
+					</label>
+					<label class="ctl">
+						<span class="row"><span>Virality skew</span><em id="skewVal"></em></span>
+						<input type="range" id="skew" min="0" max="1000" step="1">
+						<small class="sub">How strongly attention concentrates on already hot posts</small>
+					</label>
 
-		<h3>Playback</h3>
-		<label class="ctl">
-			<span class="row"><span>Simulation speed</span><em id="speedVal"></em></span>
-			<input type="range" id="speed" min="0" max="1000" step="1">
-		</label>
-		<div class="btnRow">
-			<button class="btn" id="pauseBtn">Pause</button>
-			<button class="btn" id="boostBtn">Revive an old post</button>
-			<button class="btn" id="resetBtn">Reset</button>
-		</div>
+					<h3>Playback</h3>
+					<label class="ctl">
+						<span class="row"><span>Simulation speed</span><em id="speedVal"></em></span>
+						<input type="range" id="speed" min="0" max="1000" step="1">
+					</label>
 
-		<p class="note">
-			Implements the formulas from the specification:
-			each event contributes <code>w · (1 - f)^t</code> to a post's momentum <code>m</code>,
-			and rank is <code>r = m · (1 - t_f)^t_c</code>.
-			<a href="https://github.com/tin-cat/momentum-ranking-algorithm" target="_blank" rel="noopener">Read the full presentation</a>.
-		</p>
-	</aside>
+					<p class="note">
+						Implements the formulas from the specification:
+						each event contributes <code>w · (1 - f)^t</code> to a post's momentum <code>m</code>,
+						and rank is <code>r = m · (1 - t_f)^t_c</code>.
+						<a href="https://github.com/tin-cat/momentum-ranking-algorithm" target="_blank" rel="noopener">Read the full presentation</a>.
+					</p>
+				</div>
+				<div id="panelFoot">
+					<button class="btn" id="pauseBtn">Pause</button>
+					<button class="btn" id="boostBtn">Revive an old post</button>
+					<button class="btn" id="resetBtn">Reset</button>
+				</div>
+			</aside>
+		</main>
 
-	<div id="toolbar">
-		<button class="tool" id="panelToggle" title="Parameters">⚙</button>
-		<button class="tool" id="helpBtn" title="Help">?</button>
-		<button class="tool" id="fullscreenBtn" title="Fullscreen">⛶</button>
-	</div>
-
-	<div id="legend">
-		<div class="gradRow"><span>cold</span><span class="grad"></span><span>hot momentum</span></div>
-		<div class="sizeRow">size = total attention received · height = rank · left = older</div>
+		<footer id="timePanel" class="card">
+			<canvas id="timeline"></canvas>
+			<div id="timeLegend">
+				<span class="lk">♥ likes</span>
+				<span class="cm">💬 comments</span>
+				<span>per 10 sim min</span>
+			</div>
+		</footer>
 	</div>
 
 	<div id="tooltip" hidden></div>
@@ -109,15 +130,10 @@
 				<li><strong>Size</strong> is the total attention a post has ever received.</li>
 			</ul>
 			<p>Watch old, cold posts rocket back to the top when a burst of new likes hits them. That is what sets momentum ranking apart from simple decay.</p>
-			<p>Click any post to like it yourself, shift-click to comment, and tweak every parameter of the algorithm in the ⚙ panel.</p>
+			<p>Click any post to like it yourself, shift-click to comment, and tweak every parameter of the algorithm in the panel on the right.</p>
 			<button class="btn primary" id="startBtn">Start the simulation</button>
 		</div>
 	</div>
-
-	<footer id="credit">
-		<a href="https://github.com/tin-cat/momentum-ranking-algorithm" target="_blank" rel="noopener">Momentum ranking algorithm</a>
-		· Lorenzo Herrera · <a href="https://tin.cat" target="_blank" rel="noopener">tin.cat</a>
-	</footer>
 
 	<script src="demo.js"></script>
 </body>

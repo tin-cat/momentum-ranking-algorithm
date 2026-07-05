@@ -15,6 +15,9 @@ const HOUR = 3600;
 const DAY = 86400;
 const AGE_WINDOW = 7 * DAY;
 const RANK_EPS = 0.3;
+const FEED_MAX = 30;
+const TL_BUCKET = 600; // timeline series bucket: 10 simulated minutes
+const TL_SPAN = 2.5 * DAY;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -109,16 +112,17 @@ const state = {
 	particles: [],
 	ripples: [],
 	bursts: [],
-	users: [],
 	paused: false,
 	nextId: 1,
 	postCarry: 0,
 	likeCarry: 0,
 	commentCarry: 0,
+	// no persistent user avatars: events originate from randomOrigin()
 	rankedCount: 0,
 	top: [],
 	hoverPost: null,
 	eventTimes: [],
+	series: [],
 	instantEvents: false,
 };
 
@@ -169,47 +173,60 @@ function applyEvent(post, type) {
 	}
 	post.flash = 1;
 	state.eventTimes.push(performance.now());
+	recordEvent(type);
+}
+
+function recordEvent(type) {
+	const t0 = Math.floor(state.simTime / TL_BUCKET) * TL_BUCKET;
+	let last = state.series[state.series.length - 1];
+	if (!last || last.t !== t0) {
+		last = { t: t0, likes: 0, comments: 0 };
+		state.series.push(last);
+	}
+	if (type === "like") last.likes++;
+	else last.comments++;
 }
 
 /* ---------- canvas ---------- */
 
 const canvas = document.getElementById("scene");
 const ctx = canvas.getContext("2d");
+const chartPanel = document.getElementById("chartPanel");
+const tlCanvas = document.getElementById("timeline");
+const tlCtx = tlCanvas.getContext("2d");
+const timePanel = document.getElementById("timePanel");
 const view = {};
-let panelOpen = true;
+
+function fitCanvas(cv, panel, context) {
+	const dpr = Math.max(1, window.devicePixelRatio || 1);
+	const r = panel.getBoundingClientRect();
+	cv.width = Math.max(1, Math.round(r.width * dpr));
+	cv.height = Math.max(1, Math.round(r.height * dpr));
+	context.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
 
 function resize() {
-	const dpr = window.devicePixelRatio || 1;
-	canvas.width = Math.round(innerWidth * dpr);
-	canvas.height = Math.round(innerHeight * dpr);
-	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	fitCanvas(canvas, chartPanel, ctx);
+	fitCanvas(tlCanvas, timePanel, tlCtx);
 	computeView();
-	placeUsers();
 }
 
 function computeView() {
-	view.w = innerWidth;
-	view.h = innerHeight;
-	view.plotLeft = 70;
-	view.plotRight = view.w - (panelOpen && view.w > 900 ? 372 : 60);
-	view.plotTop = 96;
-	view.crowdY = view.h - 78;
-	view.shelfY = view.h - 150;
-	view.plotBottom = view.shelfY - 52;
+	view.w = chartPanel.clientWidth;
+	view.h = chartPanel.clientHeight;
+	view.plotLeft = 64;
+	view.plotRight = view.w - 46;
+	view.plotTop = 72;
+	view.shelfY = view.h - 112;
+	view.plotBottom = view.shelfY - 44;
 }
 
-function placeUsers() {
-	const n = 26;
-	const prev = state.users;
-	state.users = [];
-	for (let i = 0; i < n; i++) {
-		const t = (i + 0.5) / n;
-		state.users.push({
-			x: view.plotLeft + t * (view.plotRight - view.plotLeft) + rand(-8, 8),
-			y: view.crowdY + rand(-7, 7),
-			phase: prev[i] ? prev[i].phase : rand(0, Math.PI * 2),
-		});
-	}
+// events fly in from the unseen audience below the chart
+function randomOrigin() {
+	return {
+		x: rand(view.plotLeft - 20, view.plotRight + 20),
+		y: view.h + 12,
+	};
 }
 
 /* ---------- heat colors ---------- */
@@ -241,7 +258,7 @@ function displayHeat(p) {
 }
 
 function radiusOf(p) {
-	return clamp(10 + 3.2 * Math.sqrt(p.likes + 2 * p.comments), 10, 36);
+	return clamp(6 + 1.7 * Math.sqrt(p.likes + 2 * p.comments), 6, 19);
 }
 
 /* ---------- simulation step ---------- */
@@ -283,7 +300,7 @@ function emitEvent(type) {
 		return;
 	}
 	particleBudget--;
-	const u = pick(state.users);
+	const u = randomOrigin();
 	state.particles.push({
 		post,
 		type,
@@ -348,7 +365,7 @@ function step(realDt) {
 				applyEvent(b.post, "like");
 			} else {
 				particleBudget--;
-				const u = pick(state.users);
+				const u = randomOrigin();
 				state.particles.push({
 					post: b.post,
 					type: "like",
@@ -367,6 +384,10 @@ function step(realDt) {
 	// occasionally an old post resurfaces on its own, the algorithm's signature moment
 	if (Math.random() < dtHours * 0.06) {
 		startBurst(pickOldPost(), Math.round(rand(30, 70)));
+	}
+
+	while (state.series.length && state.series[0].t < state.simTime - TL_SPAN - 2 * TL_BUCKET) {
+		state.series.shift();
 	}
 
 	updateRanking();
@@ -389,7 +410,7 @@ function updateRanking() {
 	ranked.sort((a, b) => b.score - a.score);
 	for (let i = 0; i < ranked.length; i++) ranked[i].rank = i;
 	state.rankedCount = ranked.length;
-	state.top = ranked.slice(0, 5);
+	state.top = ranked.slice(0, FEED_MAX);
 }
 
 function cull() {
@@ -477,7 +498,6 @@ function updateParticles(realDt) {
 function draw(now) {
 	ctx.clearRect(0, 0, view.w, view.h);
 	drawAxes();
-	drawCrowd(now);
 
 	const ordered = state.posts.slice().sort((a, b) => a.momentum - b.momentum);
 	for (const p of ordered) drawPost(p);
@@ -522,22 +542,6 @@ function drawAxes() {
 	ctx.textAlign = "right";
 	ctx.fillStyle = "rgba(160,175,195,0.45)";
 	ctx.fillText("post age", view.plotRight + 20, view.shelfY + 48);
-	ctx.restore();
-}
-
-function drawCrowd(now) {
-	ctx.save();
-	for (const u of state.users) {
-		const bob = Math.sin(now / 900 + u.phase) * 2;
-		ctx.fillStyle = "rgba(130,150,180,0.5)";
-		ctx.beginPath();
-		ctx.arc(u.x, u.y + bob, 4.2, 0, Math.PI * 2);
-		ctx.fill();
-	}
-	ctx.fillStyle = "rgba(160,175,195,0.4)";
-	ctx.font = "11px sans-serif";
-	ctx.textAlign = "left";
-	ctx.fillText("simulated users", view.plotLeft - 20, view.crowdY + 22);
 	ctx.restore();
 }
 
@@ -593,21 +597,82 @@ function drawParticles() {
 		const y = bez(pt.y0, pt.cy, pt.post.y, t);
 		ctx.globalAlpha = 0.35 + 0.65 * t;
 		if (pt.type === "like") {
-			ctx.font = "13px sans-serif";
+			ctx.font = "11px sans-serif";
 			ctx.fillStyle = "#ff5c7a";
 			ctx.fillText("♥", x, y);
 		} else {
-			ctx.font = "12px sans-serif";
+			ctx.font = "10px sans-serif";
 			ctx.fillText("💬", x, y);
 		}
 	}
 	ctx.restore();
 }
 
+/* ---------- timeline ---------- */
+
+function drawTimeline() {
+	const w = timePanel.clientWidth;
+	const h = timePanel.clientHeight;
+	tlCtx.clearRect(0, 0, w, h);
+	const left = 14;
+	const right = w - 14;
+	const top = 26;
+	const bottom = h - 20;
+	const t1 = state.simTime;
+	const t0 = t1 - TL_SPAN;
+	const xOf = t => left + ((t - t0) / TL_SPAN) * (right - left);
+
+	tlCtx.save();
+	tlCtx.font = "10.5px sans-serif";
+	tlCtx.textBaseline = "top";
+	tlCtx.textAlign = "left";
+	for (let t = Math.ceil(t0 / (6 * HOUR)) * 6 * HOUR; t <= t1; t += 6 * HOUR) {
+		const isDay = t % DAY === 0;
+		const x = xOf(t);
+		tlCtx.strokeStyle = isDay ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.05)";
+		tlCtx.beginPath();
+		tlCtx.moveTo(x, isDay ? 8 : top);
+		tlCtx.lineTo(x, bottom);
+		tlCtx.stroke();
+		if (isDay) {
+			tlCtx.fillStyle = "rgba(160,175,195,0.75)";
+			tlCtx.fillText("Day " + (Math.round(t / DAY) + 1), x + 5, 8);
+		}
+	}
+	tlCtx.strokeStyle = "rgba(255,255,255,0.1)";
+	tlCtx.beginPath();
+	tlCtx.moveTo(left, bottom);
+	tlCtx.lineTo(right, bottom);
+	tlCtx.stroke();
+
+	let max = 5;
+	for (const b of state.series) {
+		if (b.t >= t0) max = Math.max(max, b.likes, b.comments);
+	}
+	const yOf = v => bottom - (v / max) * (bottom - top);
+	for (const [key, color] of [["likes", "#ff5c7a"], ["comments", "#5cc8ff"]]) {
+		tlCtx.strokeStyle = color;
+		tlCtx.lineWidth = 1.5;
+		tlCtx.beginPath();
+		let started = false;
+		for (const b of state.series) {
+			// skip the still-filling trailing buckets so the line does not dip at the edge
+			if (b.t < t0 || b.t + 2 * TL_BUCKET > t1) continue;
+			const x = xOf(b.t + TL_BUCKET / 2);
+			const y = yOf(b[key]);
+			if (started) tlCtx.lineTo(x, y);
+			else tlCtx.moveTo(x, y);
+			started = true;
+		}
+		tlCtx.stroke();
+	}
+	tlCtx.restore();
+}
+
 function drawRipples() {
 	ctx.save();
 	for (const rp of state.ripples) {
-		const rr = rp.r + rp.t * 26;
+		const rr = rp.r + rp.t * 18;
 		ctx.globalAlpha = (1 - rp.t) * 0.7;
 		ctx.strokeStyle = rp.type === "like" ? "#ff5c7a" : "#5cc8ff";
 		ctx.lineWidth = 1.5;
@@ -642,6 +707,7 @@ function updateHud(now) {
 }
 
 function updateFeed() {
+	feedRowsEl.style.height = Math.max(1, state.top.length * 52 - 8) + "px";
 	const seen = new Set();
 	state.top.forEach((p, i) => {
 		seen.add(p.id);
@@ -696,8 +762,14 @@ function postAt(x, y) {
 	return best;
 }
 
+function canvasXY(e) {
+	const r = canvas.getBoundingClientRect();
+	return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
 canvas.addEventListener("mousemove", e => {
-	state.hoverPost = postAt(e.clientX, e.clientY);
+	const c = canvasXY(e);
+	state.hoverPost = postAt(c.x, c.y);
 	if (state.hoverPost) {
 		const p = state.hoverPost;
 		tooltipEl.hidden = false;
@@ -719,10 +791,11 @@ canvas.addEventListener("mousemove", e => {
 });
 
 canvas.addEventListener("click", e => {
-	const p = postAt(e.clientX, e.clientY);
+	const c = canvasXY(e);
+	const p = postAt(c.x, c.y);
 	if (!p) return;
 	const type = e.shiftKey ? "comment" : "like";
-	const u = pick(state.users);
+	const u = randomOrigin();
 	state.particles.push({
 		post: p,
 		type,
@@ -794,10 +867,13 @@ document.getElementById("newnessOn").addEventListener("change", e => {
 });
 
 const pauseBtn = document.getElementById("pauseBtn");
-pauseBtn.addEventListener("click", () => {
-	state.paused = !state.paused;
-	pauseBtn.textContent = state.paused ? "Resume" : "Pause";
-});
+
+function setPaused(v) {
+	state.paused = v;
+	pauseBtn.textContent = v ? "Resume" : "Pause";
+}
+
+pauseBtn.addEventListener("click", () => setPaused(!state.paused));
 
 document.getElementById("boostBtn").addEventListener("click", () => {
 	startBurst(pickOldPost() || pick(state.posts.filter(p => !p.dying)), Math.round(rand(35, 70)));
@@ -805,20 +881,18 @@ document.getElementById("boostBtn").addEventListener("click", () => {
 
 document.getElementById("resetBtn").addEventListener("click", () => {
 	Object.assign(params, defaults);
-	state.simTime = 0;
 	state.posts = [];
 	state.particles = [];
 	state.ripples = [];
 	state.bursts = [];
+	state.series = [];
 	state.nextId = 1;
 	seed();
 	syncControls();
 });
 
-const panel = document.getElementById("panel");
 document.getElementById("panelToggle").addEventListener("click", () => {
-	panelOpen = !panelOpen;
-	panel.classList.toggle("hidden", !panelOpen);
+	document.getElementById("row").classList.toggle("noPanel");
 });
 
 document.getElementById("fullscreenBtn").addEventListener("click", () => {
@@ -827,7 +901,10 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
 });
 
 const intro = document.getElementById("intro");
-document.getElementById("startBtn").addEventListener("click", () => intro.classList.add("hidden"));
+document.getElementById("startBtn").addEventListener("click", () => {
+	intro.classList.add("hidden");
+	setPaused(false);
+});
 document.getElementById("helpBtn").addEventListener("click", () => intro.classList.remove("hidden"));
 
 document.addEventListener("keydown", e => {
@@ -838,10 +915,25 @@ document.addEventListener("keydown", e => {
 });
 
 window.addEventListener("resize", resize);
+new ResizeObserver(resize).observe(chartPanel);
+new ResizeObserver(resize).observe(timePanel);
 
 /* ---------- seeding ---------- */
 
 function seed() {
+	// the network has already been running for a while when the visitor arrives
+	state.simTime = 3 * DAY;
+	for (let t = state.simTime - TL_SPAN; t < state.simTime - TL_BUCKET; t += TL_BUCKET) {
+		const base = params.likesPerHour * (TL_BUCKET / HOUR);
+		const jitter = rand(0.82, 1.18);
+		state.series.push({
+			t: Math.floor(t / TL_BUCKET) * TL_BUCKET,
+			likes: Math.max(0, Math.round(base * jitter)),
+			comments: Math.max(0, Math.round(
+				base * jitter * (params.commentsPerHour / Math.max(1, params.likesPerHour)) * rand(0.85, 1.15)
+			)),
+		});
+	}
 	for (let i = 0; i < 26; i++) {
 		const age = Math.pow(Math.random(), 1.4) * 6.2 * DAY;
 		const p = makePost(state.simTime - age);
@@ -873,7 +965,7 @@ function fastForward() {
 	const warm = state.posts.filter(p => p.rank >= 0 && p.rank < 12);
 	for (let i = 0; i < 9; i++) {
 		const post = pick(warm.length ? warm : state.posts);
-		const u = pick(state.users);
+		const u = randomOrigin();
 		state.particles.push({
 			post,
 			type: Math.random() < 0.75 ? "like" : "comment",
@@ -902,6 +994,7 @@ function frame(now) {
 	}
 	layout(realDt);
 	draw(now);
+	drawTimeline();
 	updateHud(now);
 	requestAnimationFrame(frame);
 }
@@ -913,6 +1006,9 @@ syncControls();
 if (new URLSearchParams(location.search).has("screenshot")) {
 	intro.classList.add("hidden");
 	fastForward();
+} else {
+	// hold the simulation until the visitor starts it from the intro
+	setPaused(true);
 }
 
 requestAnimationFrame(frame);
