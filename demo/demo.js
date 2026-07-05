@@ -624,6 +624,11 @@ function drawAxes() {
 	ctx.textAlign = "right";
 	ctx.fillStyle = "rgba(160,175,195,0.45)";
 	ctx.fillText("logarithmic post age", view.plotRight + 20, view.shelfY + 48);
+	ctx.textAlign = "left";
+	ctx.fillText(
+		"height = rank · left = older · color = momentum · size = attention",
+		view.plotLeft - 20, view.shelfY + 48
+	);
 	ctx.restore();
 }
 
@@ -1002,10 +1007,6 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
 const intro = document.getElementById("intro");
 document.getElementById("introClose").addEventListener("click", () => intro.classList.add("hidden"));
 document.getElementById("helpBtn").addEventListener("click", () => intro.classList.remove("hidden"));
-document.getElementById("moreHelp").addEventListener("click", e => {
-	e.preventDefault();
-	intro.classList.remove("hidden");
-});
 
 document.addEventListener("keydown", e => {
 	if (e.code === "Space" && !intro.contains(document.activeElement)) {
