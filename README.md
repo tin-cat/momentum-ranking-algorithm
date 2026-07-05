@@ -4,11 +4,14 @@ A performance oriented algorithm to rank items based on their momentary parametr
 
 It attains high performance even in databases with a very big number of items, and is optimized to keep ranks relevantly up to date, presenting relevance-ranked item lists that react close to real time.
 
-**[Read the full presentation](doc/momentum_ranking_algorithm.md)** for the complete specification, formulas and optimization strategies.
+[![Read the full presentation](https://img.shields.io/badge/Read_the_full_presentation-30363d?style=for-the-badge)](doc/momentum_ranking_algorithm.md)
+[![Live simulation](https://img.shields.io/badge/%E2%96%B6_Live_simulation-d97706?style=for-the-badge)](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)
 
 ## Live demo
 
-**[Open the interactive simulation](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)** to watch the algorithm rank a simulated social feed in real time: posts enter the system, receive likes and comments from simulated users, heat up, climb the ranking and cool down as attention fades. Old posts visibly come back to the top when a burst of new likes hits them, and network activity follows day and night cycles with quieter weekends.
+[![Live simulation](https://img.shields.io/badge/%E2%96%B6_Live_simulation-d97706?style=for-the-badge)](https://tin-cat.github.io/momentum-ranking-algorithm/demo/)
+
+Watch the algorithm rank a simulated social feed in real time: posts enter the system, receive likes and comments from simulated users, heat up, climb the ranking and cool down as attention fades. Old posts visibly come back to the top when a burst of new likes hits them, and network activity follows day and night cycles with quieter weekends.
 
 Every parameter of the algorithm can be tweaked live: event weights, decay factors, the newness factor and the behavior of the simulated network. You can also click any post to make it go viral and watch it climb the ranking.
 
