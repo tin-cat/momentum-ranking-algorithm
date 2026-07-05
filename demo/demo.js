@@ -495,10 +495,13 @@ function cull() {
 		}
 	}
 	if (state.posts.length > MAX_POSTS) {
+		// newborns score zero until their first likes arrive, which made
+		// them the cull's first victims at the cap: give them a grace
+		// period to earn their momentum
 		const excess = state.posts
-			.filter(p => !p.dying)
+			.filter(p => !p.dying && state.simTime - p.birth > 12 * HOUR)
 			.sort((a, b) => a.score - b.score || a.birth - b.birth)
-			.slice(0, state.posts.length - MAX_POSTS);
+			.slice(0, Math.max(0, state.posts.length - MAX_POSTS));
 		for (const p of excess) p.dying = true;
 	}
 	state.posts = state.posts.filter(p => !(p.dying && p.alpha <= 0));
