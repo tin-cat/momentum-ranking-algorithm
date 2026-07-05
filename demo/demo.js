@@ -13,8 +13,11 @@
 
 const HOUR = 3600;
 const DAY = 86400;
-const AGE_WINDOW = 7 * DAY;
 const RANK_EPS = 0.3;
+const AGE_TICKS = [
+	HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR,
+	DAY, 2 * DAY, 4 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 90 * DAY, 180 * DAY, 365 * DAY,
+];
 const FEED_MAX = 30;
 const TL_BUCKET = 600; // timeline series bucket: 10 simulated minutes
 const TL_SPAN = 2.5 * DAY;
@@ -30,8 +33,14 @@ function halfLifeToFactor(hlSeconds) {
 function fmtDuration(s) {
 	if (s < HOUR) return Math.round(s / 60) + " min";
 	if (s < 2 * DAY) return (s / HOUR).toFixed(1).replace(/\.0$/, "") + " h";
-	if (s < 400 * DAY) return (s / DAY).toFixed(1).replace(/\.0$/, "") + " d";
+	if (s < 350 * DAY) return (s / DAY).toFixed(1).replace(/\.0$/, "") + " d";
 	return (s / (365 * DAY)).toFixed(1).replace(/\.0$/, "") + " y";
+}
+
+function fmtAgeTick(s) {
+	if (s < DAY) return Math.round(s / HOUR) + "h";
+	if (s < 350 * DAY) return Math.round(s / DAY) + "d";
+	return "1y";
 }
 
 function fmtAge(s) {
@@ -124,6 +133,7 @@ const defaults = {
 	commentsPerHour: 45,
 	skew: 0.9,
 	speed: 1800, // simulated seconds per real second
+	ageWindow: 7 * DAY,
 };
 
 const params = Object.assign({}, defaults);
@@ -252,8 +262,8 @@ function computeView() {
 	view.plotLeft = 64;
 	view.plotRight = view.w - 46;
 	view.plotTop = 72;
-	view.shelfY = view.h - 112;
-	view.plotBottom = view.shelfY - 44;
+	view.shelfY = view.h - 78;
+	view.plotBottom = view.shelfY - 40;
 }
 
 // events drop in from just above the post they are destined to
@@ -471,7 +481,7 @@ function updateRanking() {
 
 function cull() {
 	for (const p of state.posts) {
-		if (!p.dying && state.simTime - p.birth > AGE_WINDOW + 12 * HOUR && p.momentum < 0.05) {
+		if (!p.dying && state.simTime - p.birth > params.ageWindow + 12 * HOUR && p.momentum < 0.05) {
 			p.dying = true;
 		}
 	}
@@ -488,9 +498,9 @@ function cull() {
 /* ---------- layout ---------- */
 
 function ageToX(age) {
-	// sub-linear scale gives the crowded recent hours more horizontal room
-	const t = Math.pow(clamp(age / AGE_WINDOW, 0, 1), 0.55);
-	return view.plotRight - t * (view.plotRight - view.plotLeft);
+	// logarithmic age scale: the recent hours get room, old age compresses
+	const t = Math.log1p(Math.max(0, age) / HOUR) / Math.log1p(params.ageWindow / HOUR);
+	return view.plotRight - clamp(t, 0, 1) * (view.plotRight - view.plotLeft);
 }
 
 function layout(realDt) {
@@ -569,13 +579,14 @@ function drawAxes() {
 	ctx.font = "11px sans-serif";
 	ctx.textAlign = "center";
 	ctx.textBaseline = "top";
-	for (let d = 0; d <= 7; d++) {
-		const x = ageToX(d * DAY);
+	const ticks = [0].concat(AGE_TICKS.filter(t => t <= params.ageWindow));
+	for (const tk of ticks) {
+		const x = ageToX(tk);
 		ctx.beginPath();
 		ctx.moveTo(x, view.plotTop - 14);
 		ctx.lineTo(x, view.shelfY + 26);
 		ctx.stroke();
-		ctx.fillText(d === 0 ? "now" : d + "d", x, view.shelfY + 32);
+		ctx.fillText(tk === 0 ? "now" : fmtAgeTick(tk), x, view.shelfY + 32);
 	}
 
 	// dormant shelf
@@ -915,6 +926,7 @@ const controlDefs = [
 	{ id: "likesPerHour", min: 20, max: 3000, log: true, fmt: v => Math.round(v) + " / sim hour" },
 	{ id: "commentsPerHour", min: 0, max: 600, fmt: v => Math.round(v) + " / sim hour" },
 	{ id: "skew", min: 0, max: 2, fmt: v => v.toFixed(2) },
+	{ id: "ageWindow", min: 7 * DAY, max: 365 * DAY, log: true, fmt: fmtDuration },
 	{ id: "speed", min: 60, max: 14400, log: true, fmt: v => "1 s = " + fmtDuration(v) },
 ];
 
