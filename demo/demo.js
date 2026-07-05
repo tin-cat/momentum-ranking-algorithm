@@ -18,6 +18,10 @@ const AGE_TICKS = [
 	HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR,
 	DAY, 2 * DAY, 4 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 90 * DAY, 180 * DAY, 365 * DAY,
 ];
+const SPEED_STEPS = [
+	HOUR, 2 * HOUR, 4 * HOUR, 8 * HOUR, 12 * HOUR,
+	DAY, 2 * DAY, 3 * DAY, 5 * DAY, 7 * DAY,
+];
 const FEED_MAX = 30;
 const TL_BUCKET = 600; // timeline series bucket: 10 simulated minutes
 const TL_SPAN = 2.5 * DAY;
@@ -132,7 +136,7 @@ const defaults = {
 	likesPerHour: 300,
 	commentsPerHour: 45,
 	skew: 0.9,
-	speed: 1800, // simulated seconds per real second
+	speed: HOUR, // simulated seconds per real second
 	ageWindow: 7 * DAY,
 };
 
@@ -324,8 +328,7 @@ function weightedPick(items, weightFn) {
 	return items[items.length - 1];
 }
 
-function pickTarget() {
-	const alive = state.posts.filter(p => !p.dying);
+function pickTarget(alive) {
 	if (!alive.length) return null;
 	if (Math.random() < 0.3) {
 		// discovery: fresh posts get seen regardless of momentum, but only
@@ -361,8 +364,8 @@ function sendEvent(post, type) {
 	});
 }
 
-function emitEvent(type) {
-	const post = pickTarget();
+function emitEvent(type, alive) {
+	const post = pickTarget(alive);
 	if (post) sendEvent(post, type);
 }
 
@@ -418,12 +421,13 @@ function step(realDt) {
 
 	state.likeCarry += params.likesPerHour * act * dtHours;
 	state.commentCarry += params.commentsPerHour * act * dtHours;
-	let likes = Math.min(200, Math.floor(state.likeCarry));
-	let comments = Math.min(60, Math.floor(state.commentCarry));
+	let likes = Math.min(1000, Math.floor(state.likeCarry));
+	let comments = Math.min(300, Math.floor(state.commentCarry));
 	state.likeCarry -= Math.floor(state.likeCarry);
 	state.commentCarry -= Math.floor(state.commentCarry);
-	while (likes-- > 0) emitEvent("like");
-	while (comments-- > 0) emitEvent("comment");
+	const alive = state.posts.filter(p => !p.dying);
+	while (likes-- > 0) emitEvent("like", alive);
+	while (comments-- > 0) emitEvent("comment", alive);
 
 	const commentRatio = params.commentsPerHour / Math.max(1, params.likesPerHour);
 	for (const p of state.posts) {
@@ -608,7 +612,7 @@ function drawAxes() {
 
 	ctx.textAlign = "right";
 	ctx.fillStyle = "rgba(160,175,195,0.45)";
-	ctx.fillText("post age", view.plotRight + 20, view.shelfY + 48);
+	ctx.fillText("logarithmic post age", view.plotRight + 20, view.shelfY + 48);
 	ctx.restore();
 }
 
@@ -927,15 +931,23 @@ const controlDefs = [
 	{ id: "commentsPerHour", min: 0, max: 600, fmt: v => Math.round(v) + " / sim hour" },
 	{ id: "skew", min: 0, max: 2, fmt: v => v.toFixed(2) },
 	{ id: "ageWindow", min: 7 * DAY, max: 365 * DAY, log: true, fmt: fmtDuration },
-	{ id: "speed", min: 60, max: 14400, log: true, fmt: v => "1 s = " + fmtDuration(v) },
+	{ id: "speed", steps: SPEED_STEPS, fmt: v => "1 s = " + fmtDuration(v) },
 ];
 
 function toSlider(def, v) {
+	if (def.steps) {
+		let best = 0;
+		for (let i = 1; i < def.steps.length; i++) {
+			if (Math.abs(def.steps[i] - v) < Math.abs(def.steps[best] - v)) best = i;
+		}
+		return best;
+	}
 	if (def.log) return 1000 * Math.log(v / def.min) / Math.log(def.max / def.min);
 	return 1000 * (v - def.min) / (def.max - def.min);
 }
 
 function fromSlider(def, s) {
+	if (def.steps) return def.steps[clamp(Math.round(s), 0, def.steps.length - 1)];
 	if (def.log) return def.min * Math.pow(def.max / def.min, s / 1000);
 	return def.min + (def.max - def.min) * (s / 1000);
 }
