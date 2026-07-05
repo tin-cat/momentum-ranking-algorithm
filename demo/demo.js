@@ -273,7 +273,7 @@ function computeView() {
 // events drop in from all around the post they are destined to
 function spawnPoint(post) {
 	const angle = rand(0, Math.PI * 2);
-	const dist = rand(90, 170);
+	const dist = radiusOf(post) + rand(28, 60);
 	return {
 		x: post.x + Math.cos(angle) * dist,
 		y: post.y + Math.sin(angle) * dist,
