@@ -148,7 +148,6 @@ const state = {
 	simTime: 0,
 	posts: [],
 	particles: [],
-	ripples: [],
 	paused: false,
 	nextId: 1,
 	postCarry: 0,
@@ -207,6 +206,7 @@ function makePost(birth) {
 		hasPos: false,
 		flash: 0,
 		alpha: 0,
+		edgeFade: 1,
 		dying: false,
 	};
 }
@@ -270,11 +270,13 @@ function computeView() {
 	view.plotBottom = view.shelfY - 40;
 }
 
-// events drop in from just above the post they are destined to
+// events drop in from all around the post they are destined to
 function spawnPoint(post) {
+	const angle = rand(0, Math.PI * 2);
+	const dist = rand(90, 170);
 	return {
-		x: post.x + rand(-28, 28),
-		y: Math.max(-18, post.y - rand(90, 170)),
+		x: post.x + Math.cos(angle) * dist,
+		y: post.y + Math.sin(angle) * dist,
 	};
 }
 
@@ -346,7 +348,9 @@ function pickTarget(alive) {
 let particleBudget = 0;
 
 function sendEvent(post, type) {
-	if (state.instantEvents || particleBudget <= 0 || state.particles.length > 160) {
+	// invisible targets (beyond the chart range) get their events silently
+	if (state.instantEvents || post.edgeFade <= 0 ||
+		particleBudget <= 0 || state.particles.length > 160) {
 		applyEvent(post, type);
 		return;
 	}
@@ -531,10 +535,13 @@ function layout(realDt) {
 		p.alpha = p.dying
 			? Math.max(0, p.alpha - realDt * 1.4)
 			: Math.min(1, p.alpha + realDt * 2.5);
+		// posts older than the chart range are not drawn: fade them out
+		// across the last stretch before the edge instead of popping
+		p.edgeFade = clamp((params.ageWindow - age) / (params.ageWindow * 0.03), 0, 1);
 	}
 }
 
-/* ---------- particles and ripples ---------- */
+/* ---------- particles ---------- */
 
 function bez(a, c, b, t) {
 	const u = 1 - t;
@@ -543,24 +550,19 @@ function bez(a, c, b, t) {
 
 function updateParticles(realDt) {
 	for (const pt of state.particles) {
+		if (pt.post.edgeFade <= 0) {
+			// the target slid out of the chart range mid-flight
+			if (!pt.post.dying) applyEvent(pt.post, pt.type);
+			pt.done = true;
+			continue;
+		}
 		pt.t += realDt / pt.dur;
 		if (pt.t >= 1) {
-			if (!pt.post.dying) {
-				applyEvent(pt.post, pt.type);
-				state.ripples.push({
-					x: pt.post.x,
-					y: pt.post.y,
-					r: radiusOf(pt.post),
-					t: 0,
-					type: pt.type,
-				});
-			}
+			if (!pt.post.dying) applyEvent(pt.post, pt.type);
 			pt.done = true;
 		}
 	}
 	state.particles = state.particles.filter(pt => !pt.done && !pt.post.dying);
-	for (const rp of state.ripples) rp.t += realDt * 1.8;
-	state.ripples = state.ripples.filter(rp => rp.t < 1);
 }
 
 /* ---------- drawing ---------- */
@@ -573,7 +575,6 @@ function draw(now) {
 	for (const p of ordered) drawPost(p);
 
 	drawParticles();
-	drawRipples();
 }
 
 function drawAxes() {
@@ -617,12 +618,13 @@ function drawAxes() {
 }
 
 function drawPost(p) {
-	if (p.alpha <= 0) return;
+	const alpha = p.alpha * p.edgeFade;
+	if (alpha <= 0) return;
 	const r = radiusOf(p);
 	const heat = displayHeat(p);
 
 	ctx.save();
-	ctx.globalAlpha = p.alpha;
+	ctx.globalAlpha = alpha;
 
 	const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 2.2);
 	glow.addColorStop(0, heatColor(heat, 0.28 + heat * 0.35));
@@ -762,20 +764,6 @@ function drawTimeline() {
 	tlCtx.restore();
 }
 
-function drawRipples() {
-	ctx.save();
-	for (const rp of state.ripples) {
-		const rr = rp.r + rp.t * 18;
-		ctx.globalAlpha = (1 - rp.t) * 0.7;
-		ctx.strokeStyle = rp.type === "like" ? "#ff5c7a" : "#5cc8ff";
-		ctx.lineWidth = 1.5;
-		ctx.beginPath();
-		ctx.arc(rp.x, rp.y, rr, 0, Math.PI * 2);
-		ctx.stroke();
-	}
-	ctx.restore();
-}
-
 /* ---------- HUD, feed, tooltip ---------- */
 
 const clockEl = document.getElementById("clock");
@@ -823,10 +811,7 @@ function updateFeed() {
 			el.querySelector(".em").textContent = p.emoji;
 			el.querySelector(".t").textContent = p.title;
 			el.title = "Click to make this post go viral";
-			el.addEventListener("click", () => {
-				startViral(p, 0.5);
-				state.ripples.push({ x: p.x, y: p.y, r: radiusOf(p), t: 0, type: "like" });
-			});
+			el.addEventListener("click", () => startViral(p, 0.5));
 			el.style.top = i * 52 + "px";
 			el.style.opacity = "0";
 			feedRowsEl.appendChild(el);
@@ -865,7 +850,7 @@ function updateFeed() {
 function postAt(x, y) {
 	let best = null;
 	for (const p of state.posts) {
-		if (p.alpha <= 0) continue;
+		if (p.alpha <= 0 || p.edgeFade <= 0) continue;
 		const dx = x - p.x;
 		const dy = y - p.y;
 		if (dx * dx + dy * dy <= Math.pow(radiusOf(p) + 5, 2)) {
@@ -910,7 +895,7 @@ canvas.addEventListener("click", e => {
 	const p = postAt(c.x, c.y);
 	if (!p) return;
 	startViral(p, 0.5);
-	state.ripples.push({ x: p.x, y: p.y, r: radiusOf(p), t: 0, type: "like" });
+	p.flash = 1;
 });
 
 /* ---------- controls ---------- */
@@ -1031,7 +1016,6 @@ function resetSim() {
 	state.simTime = 0;
 	state.posts = [];
 	state.particles = [];
-	state.ripples = [];
 	state.series = [];
 	state.nextId = 1;
 	state.postCarry = 0;
