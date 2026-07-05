@@ -1,5 +1,28 @@
-.code-workspace
+# OS
 .DS_Store
-thumbs.db
 ._*
-.sync-conflict-*
+Thumbs.db
+thumbs.db
+Desktop.ini
+
+# Syncthing
+*.sync-conflict-*
+.stversions/
+.stfolder/
+
+# Editors
+*.code-workspace
+.vscode/
+.idea/
+*.swp
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
